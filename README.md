@@ -27,11 +27,11 @@ Test time: each model should provide a function that writes concept embeddings i
 
 ### Code the models
 
-### Individual models
+#### Individual models
 
 Each model should be a standard PyTorch model and follow the input / output specifications defined above.
 
-### Training and testing
+#### Training and testing
 
 A single PyTorch Lightning (PL) wrapper (see example in train.py) will then handle the interactions between all models and the dataset.
 PL defines all experiment scripts such as training (reconstruct patient admission sequences) and testing (producing concept embeddings) functions.
