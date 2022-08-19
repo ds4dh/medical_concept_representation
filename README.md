@@ -18,7 +18,7 @@ The NLP models we use are GloVe, FastText, ELMO and BERT. Model trainings are ca
 
 The dataset should consist in a list of list of codes. The first list indexes admissions and the second indexes events within each admission.
 We should re-use the data pipeline of Fernando and revise which features of MIMIC-IV we want to use to build our dataset.
-The idea is to build a single dataloader for every model. The model specific operations are defined in their forward functions. 
+The idea is to build a single dataloader for all models. The model specific operations are defined in their forward functions. 
 
 #### Standard output format
 
