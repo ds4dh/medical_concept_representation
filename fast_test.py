@@ -5,15 +5,9 @@ from data import CBOWDataHolder, DEFAULT_DATA_DIR
 
 
 class FastText(nn.Module): 
-    def __init__(self, vocab_size, embed_dim, hidden_size, label_size=None):
+    def __init__(self, vocab_size, embed_dim):
         super(FastText, self).__init__()
         self.embed = nn.Embedding(vocab_size, embed_dim)
-        # self.fc = nn.Sequential(
-        #     nn.Linear(embed_dim, hidden_size),
-        #     nn.BatchNorm1d(hidden_size),  # ???
-        #     nn.ReLU(inplace=True),  # ???
-        #     nn.Linear(hidden_size, label_size if label_size else vocab_size)
-        # )
         self.fc = nn.Linear(embed_dim, vocab_size)
 
     def forward(self, x):
@@ -97,7 +91,8 @@ if __name__ == '__main__':
     cbow_size = 5
 
     # Datasets
-    dataset_holder = CBOWDataHolder(data_dir=DEFAULT_DATA_DIR,
+    data_dir = './data/json'
+    dataset_holder = CBOWDataHolder(data_dir=data_dir,
                                     tokenizer_type='minimal',
                                     cbow_size=cbow_size)
     train_dataset = dataset_holder.get_dataset('train')
@@ -116,9 +111,8 @@ if __name__ == '__main__':
     
     # Model
     embed_dim = 512
-    hidden_size = 64
     vocab_size = len(dataset_holder.tokenizer.get_vocab().keys())
-    model = FastText(vocab_size=vocab_size, embed_dim=128, hidden_size=128)
+    model = FastText(vocab_size=vocab_size, embed_dim=embed_dim)
     
     # Training and testing
     optim = torch.optim.Adam(model.parameters(), lr=lr)

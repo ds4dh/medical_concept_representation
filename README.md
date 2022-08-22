@@ -10,6 +10,11 @@ The NLP models we use are GloVe, FastText, ELMO and BERT. Model trainings are ca
 - Static vs. contextualized embeddings ({GloVe, FastText} vs. {ELMO, BERT})
 - Code vs. sub-code level tokenization (here we need to see how to apply this to all models without altering their nature)
 
+## Datasets
+Datasets are in .pickle format and have been uploaded as a zip archive to Google Drive:
+- Download the zip archive in /data, using the [following link](https://drive.google.com/file/d/1NFUnnOLFuPIcrBHYVgWN_UClDlf4mXzG/view?usp=sharing)
+- Run `python data/data_utils.py` to unzip the datasets and create a .json version
+
 ## To do
 
 ### Code a dataset pipeline

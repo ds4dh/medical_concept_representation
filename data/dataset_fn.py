@@ -27,6 +27,7 @@ class CBOWDataHolder():
         self.cbow_size = cbow_size
         self.cbow_indices = torch.tensor(
                     [i for i in range(2 * cbow_size + 1) if i != cbow_size])
+        self.ngram_range = range(3, 7)
 
         # Get the original datasets
         data_path = 'conceptofmind/wikitext-2-v1-clean'  # TODO: use real data
@@ -82,11 +83,18 @@ class CBOWDataHolder():
         vocab = self.tokenizer.get_vocab()
         ngram_list = []
         for k in vocab.keys():
-            ngram_list.append(self.generate_ngram_list(k))
+            ngram_list.append(
+                self.generate_ngram_list(word=k, ngram_range=self.ngram_range))
         self.tokenizer.add_tokens(ngram_list)
     
-    def generate_ngram_list(word):
-        pass
+    @staticmethod
+    def generate_ngram_list(word, ngram_range):
+        ngram_list = [word]
+        for ngram_len in ngram_range:
+            for c in range(len(word)):
+                ngram_list.append(word[c:c+ngram_len])
+        import pdb; pdb.set_trace()
+        return ngram_list
 
     def build_and_train_word_tokenizer(self):
         # Define iterator to train the tokenizer
