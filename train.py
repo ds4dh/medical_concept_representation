@@ -17,23 +17,16 @@ from absl import app, flags
 
 
 flags.DEFINE_boolean('debug', False, 'Debug mode')
-flags.DEFINE_string('data_dir', data.DEFAULT_DATA_DIR, 'Data directory')
-flags.DEFINE_string('tokenizer_type', 'opennmt', 'Define type of vocabulary')
-flags.DEFINE_boolean('load_model', True, 'Try to load last model ckpt')
-flags.DEFINE_string('data_format', 'smiles', 'Data format: smiles or selfies')
-flags.DEFINE_integer('num_pop_reag', -1, 'How many reagents used in training')
+flags.DEFINE_string('data_dir', './data', 'Main data directory')
+flags.DEFINE_string('tokenizer', 'code', 'Tokenization scheme: code or subcode')
+flags.DEFINE_boolean('load_model', True, 'If True, try to load last model ckpt')
+flags.DEFINE_string('data_format', 'json', 'Data format: json or pickle')
 flags.DEFINE_integer('n_steps', 500000, 'Number of steps for training')
-flags.DEFINE_integer('max_tokens', 4096, 'Max tokens in a batch')
+flags.DEFINE_integer('batchsize', 64, 'How many samples in a batch')
 flags.DEFINE_integer('num_workers', 4, 'Number of workers')
-flags.DEFINE_float('lr', 1e-2, 'Initial learning rate (after warm-up)')
-flags.DEFINE_integer('n_warmup_steps', 8000, 'Number of warmup steps')
-flags.DEFINE_integer('d_embed', 256, 'Dimension of transformer embeddings')
-flags.DEFINE_integer('d_ff', 2048, 'Dimension used in feedforward layers')
-flags.DEFINE_integer('n_heads', 8, 'Number of heads used in Transformer')
-flags.DEFINE_integer('n_enc_layers', 4, 'Number of encoder layers')
-flags.DEFINE_integer('n_dec_layers', 4, 'Number of decoder layers')
-flags.DEFINE_float('dropout', 0.1, 'Dropout probability')
-flags.DEFINE_boolean('find_lr', False, 'Find learning rate automatically')
+flags.DEFINE_float('lr', 1e-2, 'Initial learning rate (after warm-up)')  # may be scheduler and optimizers can be model-specific
+flags.DEFINE_integer('n_warmup_steps', 8000, 'Number of warmup steps')  # may be scheduler and optimizers can be model-specific
+flags.DEFINE_boolean('find_lr', False, 'Find learning rate automatically')  # may be scheduler and optimizers can be model-specific
 FLAGS = flags.FLAGS
 
 
@@ -186,7 +179,7 @@ class LightningTransformer(pl.LightningModule):
         data_type: str
             Type of data to return. Can be 'train', 'val', or 'test'
         shuffle: bool
-            Whether to shuffle the data or not (typically for training)
+            Whether to shuffle the data (typically for training) or not
 
         Returns:
         --------
@@ -210,7 +203,7 @@ class LightningTransformer(pl.LightningModule):
     
     def val_dataloader(self):
         ''' Return the validation dataloader '''
-        return self.get_dataloaders('val', shuffle=True)  # False
+        return self.get_dataloaders('val', shuffle=False)
 
     def test_dataloader(self):
         ''' Return the testing dataloader '''
@@ -240,23 +233,18 @@ def main(_):
     
     '''
     # Create the model
-    model_name = f'transformer_lr_{FLAGS.lr}_tok_{FLAGS.tokenizer_type}'
     model_params = {
-        'n_enc_layers': FLAGS.n_enc_layers,
-        'n_dec_layers': FLAGS.n_dec_layers,
-        'd_embed': FLAGS.d_embed,
-        'd_ff': FLAGS.d_ff,
-        'n_heads': FLAGS.n_heads,
-        'dropout': FLAGS.dropout,
-        'share_embeddings': True
+        'embed_dim': 512,  # these should be defined in config files for every model
+        'dropout': 0.1,  # these should be defined in config files for every model
     }
+    model_name = f'fast_text_{model_params}'  # these should be defined in config files for every model
     model = LightningTransformer(model_params)
 
     # Deal with checkpointing
     model_dir = os.path.join('logs', model_name)
     if FLAGS.load_model:
         try:
-            ckpt_dir = os.path.join(model_dir, 'version_0/checkpoints')
+            ckpt_dir = os.path.join(model_dir, 'version_0/checkpoints')  # TODO: account for checkpoint versions
             ckpt_name = [p for p in os.listdir(ckpt_dir) if 'ckpt' in p][-1]
             ckpt_path = os.path.join(ckpt_dir, ckpt_name)
         except (IndexError, FileNotFoundError):

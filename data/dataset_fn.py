@@ -36,10 +36,11 @@ class CBOWDataHolder():
                                                      'val': 'train[80%:90%]',
                                                      'test': 'train[90%:]'})
         # Get the original datasets
+        data_fmt = data_dir.split('/')[-1]
         data_files = {
-            'train': os.path.join(data_dir, 'train.json'),
-            'val': os.path.join(data_dir, 'val.json'),
-            'test': os.path.join(data_dir, 'test.json')
+            'train': os.path.join(data_dir, f'sentences_time_train.{data_fmt}'),
+            'val': os.path.join(data_dir, f'sentences_time_val.{data_fmt}'),
+            'test': os.path.join(data_dir, f'sentences_time_test.{data_fmt}')
         }
         self.datasets = datasets.load_dataset('json', data_files=data_files)
 
@@ -92,15 +93,17 @@ class CBOWDataHolder():
         for k in vocab.keys():
             ngram_list.append(
                 self.generate_ngram_list(word=k, ngram_range=self.ngram_range))
+        import pdb; pdb.set_trace()
         self.tokenizer.add_tokens(ngram_list)
     
     @staticmethod
     def generate_ngram_list(word, ngram_range):
+        len_word = len(word)
         ngram_list = [word]
         for ngram_len in ngram_range:
-            for c in range(len(word)):
-                ngram_list.append(word[c:c+ngram_len])
-        import pdb; pdb.set_trace()
+            if ngram_len < len_word:
+                for c in range(len_word - ngram_len + 1):
+                    ngram_list.append(word[c:c+ngram_len])
         return ngram_list
 
     def build_and_train_word_tokenizer(self):
