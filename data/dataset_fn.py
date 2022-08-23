@@ -35,6 +35,13 @@ class CBOWDataHolder():
                                               split={'train': 'train[:80%]',
                                                      'val': 'train[80%:90%]',
                                                      'test': 'train[90%:]'})
+        # Get the original datasets
+        data_files = {
+            'train': os.path.join(data_dir, 'train.json'),
+            'val': os.path.join(data_dir, 'val.json'),
+            'test': os.path.join(data_dir, 'test.json')
+        }
+        self.datasets = datasets.load_dataset('json', data_files=data_files)
 
         # Replace text sequences by their tokenized versions
         self.tokenizer = self.build_and_train_word_tokenizer()
