@@ -1,8 +1,6 @@
 import os
 import sys
-import time
 import select
-import itertools
 import json
 import pandas as pd
 import zipfile
