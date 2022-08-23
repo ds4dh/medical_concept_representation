@@ -4,6 +4,7 @@ import select
 import json
 import pandas as pd
 import zipfile
+from tqdm import tqdm
 from absl import app, flags
 
 
@@ -28,23 +29,20 @@ def pickle_to_json(pickle_dir, json_dir):
             json_path_full = os.path.join(json_dir, json_path)
             with open(json_path_full, 'w') as f:
                 if type(pkl) is dict:
-                    print('\r\t-> writing json file %s' % (json_path))
+                    print('-> writing json file %s' % (json_path))
                     json_line = json.dumps(pkl)
                     f.write(json_line + '\n')
                 elif type(pkl) is list:
-                    for idx, line in enumerate(pkl):
-                        print('\r\t-> writing (line %i/%i) in json file %s' %\
-                             (idx, len(pkl), json_path), end='')
-                        dict_to_dump = {'text': line}
+                    for line in tqdm(pkl, desc='-> writing %s' % json_path):
+                        dict_to_dump = {'text': ' '.join(line)}
                         json_line = json.dumps(dict_to_dump)
                         f.write(json_line + '\n')
-                    print()
                 else:
                     raise TypeError('Pickle type not recognized.')
 
 
 def timed_input(prompt, timeout, default=None):
-    sys.stdout.write(prompt + '\n')
+    sys.stdout.write(prompt + '-> ')
     sys.stdout.flush()
     ready, _, _ = select.select([sys.stdin], [],[], timeout)
     if ready:
@@ -65,7 +63,7 @@ def build_dataset(_):
 
     # Unzip data .zip file if necessary
     if os.path.exists(zip_file_path):
-        if timed_input('Zip file detected. Unzip it? ([y]/n) ', 5, 'n') == 'y':
+        if timed_input('Zip file detected. Unzip it? (y/[n]) ', 5, 'n') == 'y':
             print(f'Unzipping the zip file into {data_dir}')
             unzip_data(zip_file_path, data_dir)
         else:
