@@ -159,7 +159,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         split: str
             Split of the dataset to return. Can be 'train', 'val', or 'test'
         shuffle: bool
-            Whether to shuffle the data or not (typically for training)
+            Whether to shuffle the data (typically for training) or not
 
         Returns:
         --------
@@ -206,7 +206,7 @@ def main():
     model_dir = os.path.join('logs', model_used)
     if general_params['load_model']:
         try:
-            ckpt_dir = os.path.join(model_dir, 'version_0/checkpoints')
+            ckpt_dir = os.path.join(model_dir, 'version_0/checkpoints')  # TODO: account for checkpoint versions
             ckpt_name = [p for p in os.listdir(ckpt_dir) if 'ckpt' in p][-1]
             ckpt_path = os.path.join(ckpt_dir, ckpt_name)
         except (IndexError, FileNotFoundError):

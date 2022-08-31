@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from data import CBOWDataHolder, DEFAULT_DATA_DIR
+from data import CBOWDataHolder
 
 
 class FastText(nn.Module): 
@@ -88,12 +88,13 @@ if __name__ == '__main__':
     n_epochs = 10
     batch_size = 64
     max_batches = torch.inf  # 500
-    cbow_size = 5
 
     # Datasets
     data_dir = './data/json'
+    tokenizer_type = 'code'  # 'code' / 'subcode'
+    cbow_size = 5
     dataset_holder = CBOWDataHolder(data_dir=data_dir,
-                                    tokenizer_type='minimal',
+                                    tokenizer_type=tokenizer_type,
                                     cbow_size=cbow_size)
     train_dataset = dataset_holder.get_dataset('train')
     valid_dataset = dataset_holder.get_dataset('val')
