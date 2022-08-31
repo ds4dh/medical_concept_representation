@@ -1,0 +1,47 @@
+[general]
+  debug = true
+  load_model = false
+  load_tokenizer = true
+  find_best_lr = false
+
+[model]
+  model_used = 'pytorch_bert'
+  model_id = 'test'
+  [model.my_bert]
+    n_layers = 4
+    max_len = 512
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
+    dropout = 0.1
+  [model.pytorch_bert]
+    n_layers = 4
+    max_len = 512
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
+    dropout = 0.1
+  [model.fasttext]
+    d_embed = 256
+
+[training]
+  lr = 2.0
+  adam_betas = [0.9, 0.998]
+  max_tokens = 4096
+  n_steps = 500000
+  n_warmup_steps = 8000
+  num_workers = 0
+  pin_memory = false
+
+[data]
+  data_dir = '/mnt/d/DL/datasets/autophe/json'
+  data_subdir = 'time_not_categorized'
+  log_dir = './logs'
+  data_keys = ['text']
+  max_len = 512
+  [data.special_tokens]
+    pad = '[PAD]'
+    bos = '[CLS]'
+    eos = '[SEP]'
+    unk = '[UNK]'
+    

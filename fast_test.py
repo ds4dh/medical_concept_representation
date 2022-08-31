@@ -5,10 +5,10 @@ from data import CBOWDataHolder, DEFAULT_DATA_DIR
 
 
 class FastText(nn.Module): 
-    def __init__(self, vocab_size, embed_dim):
+    def __init__(self, vocab_size, d_embed):
         super(FastText, self).__init__()
-        self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.fc = nn.Linear(embed_dim, vocab_size)
+        self.embed = nn.Embedding(vocab_size, d_embed)
+        self.fc = nn.Linear(d_embed, vocab_size)
 
     def forward(self, x):
         x = self.embed(x)  # (batch_size, seq_len, vec_dim)
