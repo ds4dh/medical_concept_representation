@@ -6,7 +6,7 @@
   load_model = false
   load_tokenizer = true
   find_best_lr = false
-  num_workers = 0
+  num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
@@ -22,6 +22,7 @@
 [train]
   lr = 2.0
   adam_betas = [0.9, 0.998]
+  accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
   n_steps = 500000
   n_warmup_steps = 8000

@@ -5,7 +5,7 @@ from torchdata.datapipes.iter import Batcher, Shuffler
 
 
 class DataPipeline():
-    """ Pipeline for a dataset consisting in a collection of token sequences """
+    """ Pipeline for a dataset consisting in a collection of word sequences """
     def __init__(self, data_dir, data_subdir, data_keys, debug,
                  max_tokens_per_batch, special_tokens, encoding):
         # Data parameters       
@@ -33,35 +33,14 @@ class DataPipeline():
 
     # TODO: MAKE THIS AN MLM PIPELINE
     def mlm_pipeline(self, split, shuffle=False):
-        """ Data pipeline for masked language modelling. The pipeline extracts
-            data from a given split, encodes samples and batches efficiently.
-            
-        Params:
-        -------
-        split (str): split of the data to take ('train', 'val', 'test')
-        shuffle (bool): whether batches are shuffled
-        
-        Returns:
-        --------
-        iterable: provide the batched token ids
-        
-        """
-        # Extract samples from the selected file of the data directory
         dp = data.JsonReader(self.data_fulldir, split)
         dp = data.DynamicBucketBatcher(dp, max_tokens=1e5)
-        
-        # Encoding and batching (grouped by similar length, dynamic batch size)
         dp = data.Encoder(dp, self.tokenizer, self.data_keys)
         dp = data.DynamicBucketBatcher(dp, max_tokens=self.max_tokens)
-
-        # Padding, shuffling and sending to tensors
         # dp = DynamicMasker(dp) --> FOR THE TODO: TYPICALLY HERE
         dp = data.Padder(dp, self.special_ids, self.max_len, self.data_keys)
         if shuffle: dp = Shuffler(dp)
-        dp = data.Torcher(dp, self.data_keys)
-        
-        # Return the final pipeline
-        return dp
+        return data.Torcher(dp, self.data_keys)
 
     def get_pipeline(self, task, split, shuffle=False):
         if task == 'skipgram':

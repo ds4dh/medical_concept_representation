@@ -1,3 +1,3 @@
 Datasets have been uploaded as a zip archive to Google Drive:
-- Download the zip archive in ./data or the directory of your choice, using the [following link](https://drive.google.com/file/d/1NFUnnOLFuPIcrBHYVgWN_UClDlf4mXzG/view?usp=sharing)
-- Run `python data/data_utils.py --data_dir=dir/or/your/choice` to have the dataset ready. If you don't provide --data_dir, it will be assumed the zip file is in ./data
+- Download the zip archive using the [following link](https://drive.google.com/file/d/1gjaWxg22OTOnQOxp9OVN2aFfqXY0xaYl/view?usp=sharing)
+- Unzip the zip archive in ./data (the json folder should be inside of ./data)

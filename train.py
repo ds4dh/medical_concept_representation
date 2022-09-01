@@ -197,7 +197,8 @@ def main():
                          accelerator=accelerator,
                          devices=devices,
                          auto_lr_find=run_params['find_best_lr'],
-                         accumulate_grad_batches=4,
+                         accumulate_grad_batches= \
+                            train_params['accumulate_grad_batches'],
                          gradient_clip_val=0.0,
                          num_sanity_val_steps=0,
                          log_every_n_steps=10,

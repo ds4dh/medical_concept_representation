@@ -33,7 +33,7 @@ def filter_fn(filename, split):
 
 
 def sort_fn(bucket):
-    """ Sort samples in a bucket using a length metric given by sort_len_fn.
+    """ Sort samples in a bucket using a length metric given by sort_len_fn
     
     Args:
         bucket (iterable of dicts): set of samples to sort
@@ -43,24 +43,6 @@ def sort_fn(bucket):
     
     """
     return sorted(bucket, key=len_fn)  # takes default argument of len_fn
-
-
-def compute_len(sample):
-    """ Length metric depending on input type.
-    
-    Args:
-        sample (str or list): element whose length is computed
-    
-    Returns:
-        int: length of the sample
-    
-    """
-    if type(sample) is str:
-        return sample.count(' ') + 1
-    if type(sample) is list:
-        return len(sample)
-    else:
-        raise TypeError(f'Bad input type {type(sample)}')
 
 
 def len_fn(sample, unique=False, method='first'):
@@ -90,6 +72,24 @@ def len_fn(sample, unique=False, method='first'):
     if unique:
         length += (0.01 * random.random()) - 0.005
     return length
+
+
+def compute_len(sample):
+    """ Length metric depending on input type
+    
+    Args:
+        sample (str or list): element whose length is computed
+    
+    Returns:
+        int: length of the sample
+    
+    """
+    if type(sample) is str:
+        return sample.count(' ') + 1
+    if type(sample) is list:
+        return len(sample)
+    else:
+        raise TypeError(f'Bad input type {type(sample)}')
 
 
 def encode_fn(batch_or_sample, tokenizer):
@@ -143,25 +143,15 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-def create_cooc(document, max_names=20000):
-    """ Create co-occurences matrix
-
-    Args:
-        document (list of lists of strs): training dataset samples
-        max_names (int): maximum number of names (to avoid memory issue)
-
-    Returns:
-        list of lits: co-occurences matrix
-        
-    """
-    print('Creating co-occurence matrix')
+def create_cooc(document):
+    print('Creating co-occurrence matrix')
     names = np.unique(flatten(document)).tolist()
     occurrences = OrderedDict((name, OrderedDict((name, 0) for name in names))
                               for name in names)
     # occurrences = {name: {name: 0 for name in names} for name in names}
 
     # Find the co-occurrences:
-    for l in tqdm(document, leave=False, desc='Filling co-occurence matrix'):
+    for l in tqdm(document, leave=False, desc='Filling co-occurrence matrix'):
         for i in range(len(l)):
             for item in l[:i] + l[i + 1:]:
                 occurrences[l[i]][item] += 1
@@ -189,15 +179,11 @@ def format_cooc(cooc):
     return left, right, cooc_int
 
 
-def load_cooc_data(data_dir):
-    raise NotImplementedError('The function load_cooc is not implemented yet.')
-
-
 class JsonReader(IterDataPipe):
     """ Combined pipeline to list, select, open, read and parse a json file """
     def __init__(self, data_dir, split):
         dp = FileLister(data_dir)
-        dp = Filter(dp, partial(filter_fn, split))
+        dp = Filter(dp, partial(filter_fn, split=split))
         dp = FileOpener(dp)
         dp = LineReader(dp)
         self.dp = dp
@@ -208,23 +194,18 @@ class JsonReader(IterDataPipe):
     
     
 class GloveJsonReader(IterDataPipe):
-    """ Create left/right context and co-occurence lists  and yields samples"""
-    def __init__(self, data_dir, split, tokenizer, load_cooc=False):
-        if load_cooc:
-            self.dp = load_cooc_data(data_dir)
-        else:
-            raw_cooc = create_cooc(JsonReader(data_dir, split))
-            filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # no idea about min_cooc
-            left, right, cooc = format_cooc(filtered_cooc)
-            self.length = len(list(cooc))
-            left = encode_fn(left, tokenizer)
-            right = encode_fn(right, tokenizer)
-            cooc = (float(i) for i in cooc)
-            self.dp = [{'left': l, 'right': r, 'cooc': c}
-                        for l, r, c in zip(left, right, cooc)]
-
-    def __len__(self):
-        return self.length
+    """ Create left/right context and co-occurrence lists and yields samples """
+    def __init__(self, data_dir, split, tokenizer):
+        raw_cooc = create_cooc(JsonReader(data_dir, split))
+        filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # no idea about min_cooc
+        left, right, cooc = format_cooc(filtered_cooc)
+        
+        left = encode_fn(left, tokenizer)
+        right = encode_fn(right, tokenizer)
+        cooc = (float(i) for i in cooc)
+        
+        self.dp = [{'left': l, 'right': r, 'cooc': c}
+                    for l, r, c in zip(left, right, cooc)]
 
     def __iter__(self):
         for sample in self.dp:
@@ -277,18 +258,6 @@ class Encoder(IterDataPipe):
                 yield [dict(zip(ids, t)) for t in zip(*ids.values())]
             else:
                 yield self.encode_fn(batch)
-
-
-# class Encoder(IterDataPipe):
-#     """ Take the _Encoder output and unbatch it """
-#     def __init__(self, dp, tokenizer, data_keys=[]):
-#         dp = _Encoder(dp, tokenizer, data_keys)
-#         dp = UnBatcher(dp)
-#         self.dp = dp
-                
-#     def __iter__(self):
-#         for batch in self.dp:
-#             yield batch
 
 
 class Padder(IterDataPipe):
