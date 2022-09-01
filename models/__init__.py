@@ -1,3 +1,6 @@
 from .fasttext import FastText
-from .my_bert import MyBert
-from .pytorch_bert import PyTorchBert
+from .bert import BERT
+from .glove import Glove
+AVAILABLE_MODELS = {'fasttext': FastText,
+                    'glove': Glove,
+                    'bert': BERT}
