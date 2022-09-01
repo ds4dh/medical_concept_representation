@@ -1,5 +1,3 @@
-import os
-import tempfile
 import json
 import random
 import torch
@@ -8,8 +6,8 @@ from tqdm import tqdm
 from collections import OrderedDict
 from functools import partial
 from itertools import zip_longest
-from torchdata.datapipes.iter import IterDataPipe
 from torchdata.datapipes.iter import (
+    IterDataPipe,
     FileLister,
     FileOpener,
     Filter,
@@ -19,8 +17,20 @@ from torchdata.datapipes.iter import (
     MaxTokenBucketizer
 )
 
-# def key_value_fn(batch):
-#     return (batch[key] for key in batch.keys())
+
+def filter_fn(filename, split):
+    """ Filter function that selects the correct file given a split
+    
+    Args:
+        filename (str): name of the candidate file
+        split (str): split ('train', 'val', or 'test')
+
+    Returns:
+        (bool): wether the given file corresponds to the given split.
+
+    """
+    return split in filename
+
 
 def sort_fn(bucket):
     """ Sort samples in a bucket using a length metric given by sort_len_fn.
@@ -82,21 +92,7 @@ def len_fn(sample, unique=False, method='first'):
     return length
 
 
-def path_fn(filename):
-    """ Generate a path name for a cache to be stored in the tmp folder
-    
-    Args:
-        filename (str): name of the file to cache
-    
-    Returns:
-        str: path to the cached file
-        
-    """
-    temp_dir = tempfile.gettempdir()
-    return os.path.join(temp_dir, os.path.basename(filename))
-
-
-def encode_fn(batch, tokenizer):
+def encode_fn(batch_or_sample, tokenizer):
     """ Encode input tokens with a tokenizer
     
     Args:
@@ -107,11 +103,8 @@ def encode_fn(batch, tokenizer):
         iterable of lists: tokenized batch
     
     """
-    # CHECK HERE BECAUSE ITS LIST BUT NOT BATCH!!
-    if type(batch) is str:
-        return tokenizer.encode(batch).ids
-    else:
-        return [e.ids for e in tokenizer.encode_batch(batch)]
+    # For now I do it simple, but we could do by batch (not sure if impactful)
+    return (tokenizer.encode(word) for word in batch_or_sample)
 
 
 def encapsulate_fn(sequence, bos_id, eos_id):
@@ -150,22 +143,25 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-def create_cooc(document):
+def create_cooc(document, max_names=20000):
     """ Create co-occurences matrix
 
     Args:
         document (list of lists of strs): training dataset samples
+        max_names (int): maximum number of names (to avoid memory issue)
 
     Returns:
         list of lits: co-occurences matrix
         
     """
+    print('Creating co-occurence matrix')
     names = np.unique(flatten(document)).tolist()
-    occurrences = OrderedDict((name, OrderedDict((name, 0)
-                              for name in names)) for name in names)
+    occurrences = OrderedDict((name, OrderedDict((name, 0) for name in names))
+                              for name in names)
+    # occurrences = {name: {name: 0 for name in names} for name in names}
 
     # Find the co-occurrences:
-    for l in tqdm(document, leave=False):
+    for l in tqdm(document, leave=False, desc='Filling co-occurence matrix'):
         for i in range(len(l)):
             for item in l[:i] + l[i + 1:]:
                 occurrences[l[i]][item] += 1
@@ -193,32 +189,62 @@ def format_cooc(cooc):
     return left, right, cooc_int
 
 
+def load_cooc_data(data_dir):
+    raise NotImplementedError('The function load_cooc is not implemented yet.')
+
+
 class JsonReader(IterDataPipe):
     """ Combined pipeline to list, select, open, read and parse a json file """
     def __init__(self, data_dir, split):
         dp = FileLister(data_dir)
-        dp = Filter(dp, lambda t: split in t)
+        dp = Filter(dp, partial(filter_fn, split))
         dp = FileOpener(dp)
         dp = LineReader(dp)
         self.dp = dp
     
     def __iter__(self):
         for _, stream in self.dp:
-            yield json.loads(stream)
-            
+           yield json.loads(stream)
+    
+    
+class GloveJsonReader(IterDataPipe):
+    """ Create left/right context and co-occurence lists  and yields samples"""
+    def __init__(self, data_dir, split, tokenizer, load_cooc=False):
+        if load_cooc:
+            self.dp = load_cooc_data(data_dir)
+        else:
+            raw_cooc = create_cooc(JsonReader(data_dir, split))
+            filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # no idea about min_cooc
+            left, right, cooc = format_cooc(filtered_cooc)
+            self.length = len(list(cooc))
+            left = encode_fn(left, tokenizer)
+            right = encode_fn(right, tokenizer)
+            cooc = (float(i) for i in cooc)
+            self.dp = [{'left': l, 'right': r, 'cooc': c}
+                        for l, r, c in zip(left, right, cooc)]
+
+    def __len__(self):
+        return self.length
+
+    def __iter__(self):
+        for sample in self.dp:
+            yield sample
+
             
 class DictUnzipper(IterDataPipe):
     """ Take an iterable of dicts and unzip it to a dict of iterables """
-    def __init__(self, dp, data_keys):
+    def __init__(self, dp):
         self.dp = dp
-        self.data_keys = data_keys
+        self.data_keys = None
     
     def __iter__(self):
         for batch in self.dp:
+            if self.data_keys == None:
+                self.data_keys = batch[0].keys()
             yield {key: [s[key] for s in batch] for key in self.data_keys}
 
 
-class DynamicBucketBatcher():
+class DynamicBucketBatcher(IterDataPipe):
     """ Combine bucket-batching (batching by groups of sequences with similar
         length) with token-batching (batching based on number of input tokens).
     """
@@ -234,7 +260,7 @@ class DynamicBucketBatcher():
             yield batch
 
 
-class _Encoder(IterDataPipe):
+class Encoder(IterDataPipe):
     """ Encode tokens to token ids using the given encoder function.
         Input pipe can consist of a dict of batched lists or a batched list.
     """
@@ -253,16 +279,16 @@ class _Encoder(IterDataPipe):
                 yield self.encode_fn(batch)
 
 
-class Encoder():
-    """ Take the _Encoder output and unbatch it """
-    def __init__(self, dp, tokenizer, data_keys=[]):
-        dp = _Encoder(dp, tokenizer, data_keys=[])
-        dp = UnBatcher(dp)
-        self.dp = dp
+# class Encoder(IterDataPipe):
+#     """ Take the _Encoder output and unbatch it """
+#     def __init__(self, dp, tokenizer, data_keys=[]):
+#         dp = _Encoder(dp, tokenizer, data_keys)
+#         dp = UnBatcher(dp)
+#         self.dp = dp
                 
-    def __iter__(self):
-        for batch in self.dp:
-            yield batch
+#     def __iter__(self):
+#         for batch in self.dp:
+#             yield batch
 
 
 class Padder(IterDataPipe):
@@ -292,38 +318,12 @@ class Torcher(IterDataPipe):
     """ Transform a batch of iterables in a tensor of the same dimensions.
         Input pipe can consist of a dict of batched lists or a batched list.
     """
-    def __init__(self, dp, data_keys=[]):
+    def __init__(self, dp):
         self.dp = dp
-        self.data_keys = data_keys
-    
+
     def __iter__(self):
         for batch in self.dp:
-            if len(self.data_keys) > 0:
-                yield {key: torch.tensor(batch[key]) for key in self.data_keys}
+            if type(batch) is dict:  # len(self.data_keys) > 0:
+                yield {key: torch.tensor(batch[key]) for key in batch.keys()}
             else:
                 yield torch.tensor(batch)
-
-
-class Glover(IterDataPipe):
-    """ Transform an item into a set of left/right context and co-occurence """
-    def __init__(self, dp, data_dir, load_cooc=False):
-        self.dp = dp
-        raw_cooc = create_cooc(JsonReader(data_dir, 'val'))
-        self.left, self.right, self.cooc = format_cooc(raw_cooc)
-        # Ttokenized beforehand!!! (with data.Encoder)
-        # self.tokenizer = tokenizer
-        # self.l_e = [self.tokenizer.encode(i) for i in left]
-        # self.r_e = [self.tokenizer.encode(i) for i in right]
-        # self.c = [float(i) for i in cooc]
-
-    # def __len__(self):
-    #     return len(self.cooc)
-
-    def __iter__(self):
-        for item in self.dp:
-            yield {
-                'left': self.l_e[item],
-                'right': self.r_e[item],
-                'cooc': self.c[item]
-            }
-

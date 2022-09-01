@@ -20,10 +20,10 @@ class Glove(nn.Module):
         
         self.loss_fn = GloveLoss()
 
-    def forward(self, left_id, right_id):
+    def forward(self, left, right):
 
-        l_v, l_b = self.l_emb(left_id), self.l_bias(left_id).squeeze()
-        r_v, r_b = self.r_emb(right_id), self.r_bias(right_id).squeeze()
+        l_v, l_b = self.l_emb(left), self.l_bias(left).squeeze()
+        r_v, r_b = self.r_emb(right), self.r_bias(right).squeeze()
 
         return (l_v * r_v).sum(-1) + l_b + r_b
 
@@ -60,54 +60,13 @@ class GloveLoss(nn.Module):
         """
         Normalization as in the original article.
         """
-        return torch.where(condition=t < self.m,
-                           x=(t / self.m) ** self.a,
-                           y=torch.ones_like(t))
+        return torch.where(t < self.m, (t / self.m) ** self.a, torch.ones_like(t))
 
-    def forward(self, prediction, target):
+    def forward(self, model_output, cooc):
         """
-        Expects flattened predictions and target coocurence matrix.
+        Expects flattened model output and target coocurence matrix.
         """
-        n_t = self.normalize(target)
-        l_t = torch.log(target)
+        n_t = self.normalize(cooc)
+        l_t = torch.log(cooc)
 
-        return torch.sum(n_t * (prediction - l_t) ** 2)
-
-
-def one_train(model,
-              iterator,
-              optimizer,
-              criterion,
-              device):
-
-    # Needed to store losses.
-    epoch_loss = 0
-
-    # Model in training stage.
-    model.train()
-
-    for batch in tqdm(iterator, desc="Training", leave=False):
-
-        # At each batch, we backpropagate the signal.
-        optimizer.zero_grad()
-
-        # Retrieve batch elements.
-        l, r, c = batch["left"].to(device), batch["right"].to(
-            device), batch["cooc"].to(device)
-
-        # Compute predictions.
-        predictions = model(l, r)
-
-        # Compute loss.
-        loss = criterion(predictions, c)
-
-        # Compute gradients.
-        loss.backward()
-
-        # Backpropagate.
-        optimizer.step()
-
-        # Store loss.
-        epoch_loss += loss.item()
-
-    return epoch_loss/len(iterator)
+        return torch.sum(n_t * (model_output - l_t) ** 2)

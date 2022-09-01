@@ -114,11 +114,3 @@ def display_pca_scatterplot(model, words=None, sample=0):
     plt.scatter(twodim[:, 0], twodim[:, 1], edgecolors='k', c='r')
     for word, (x, y) in zip(words, twodim):
         plt.text(x+0.05, y+0.05, word)
-
-
-if __name__ == '__main__':
-    tok = SubWordTokenizer(ngram_len=3)
-    words = 'coucou je mappelle alban et jaime bien boire des bières'
-    tok.fit(words)
-    import pdb; pdb.set_trace()
-    

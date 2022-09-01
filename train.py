@@ -22,36 +22,40 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.pipeline = data.DataPipeline(data_params['data_dir'],
                                           data_params['data_subdir'],
                                           data_params['data_keys'],
+                                          run_params['debug_mode'],
+                                          train_params['max_tokens_per_batch'],
                                           model_params['special_tokens'],
                                           run_params['encoding'])
         
         # Load model and some useful parameters
         model_params['vocab_size'] = len(self.pipeline.tokenizer.encoder)
         self.model = model(**model_params)
+        self.input_keys = set(model_params['input_keys'])
+        self.label_keys = set(model_params['label_keys'])
         self.learning_rate = train_params['lr']
         
     def step(self, batch, mode):
-        ''' Proceed forward pass of the mode, compute loss
-            Note: the loss function used to compute the loss is model specific
+        ''' Proceed forward pass of the mode ('train' or 'val'), compute loss
+            Note: the loss function used to compute the loss is model-specific
         
         Params:
         -------
         batch: dict
             Dictionary with the batch data
         mode: str
-            Whether the step is a 'train' or 'val' step (for logging)
+            Whether the step is a 'train' or 'val' step
 
         Returns:
         --------
-        dict: dictionary containing the loss and the output of the model
+        dict: dictionary containing the loss (could contain more stuff)
         
         '''
-        import pdb; pdb.set_trace()
-        input_, target = batch['input'], batch['target']
-        output = self.model(input_)
-        loss = self.model.loss_fn(output, target)
+        inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
+        labels = {k: batch[k] for k in batch.keys() & self.label_keys}
+        outputs = self.model(**inputs)
+        loss = self.model.loss_fn(outputs, **labels)
         self.log('%s_loss' % mode, loss.cpu().detach())
-        return {'loss': loss, 'output': output.cpu().detach()}
+        return {'loss': loss}  #, 'output': output.cpu().detach()}
 
     def training_step(self, batch, batch_idx):
         ''' Compute the training loss for backpropagation
@@ -67,11 +71,11 @@ class PytorchLightningWrapper(pl.LightningModule):
         --------
         dict
             Dictionary with the training loss used for backpropagation
+            TODO: could add more outputs here
         
         '''
-        step_output = self.step(batch, 'train')
-        return {'loss': step_output['loss'], 'acc': step_output['acc']}
-    
+        return self.step(batch, 'train')
+        
     def validation_step(self, batch, batch_idx):
         ''' Compute validation loss and correctly predicted tokens
         
@@ -86,12 +90,11 @@ class PytorchLightningWrapper(pl.LightningModule):
         --------
         outputs: dict
             Features that are used at the end of the validation step
+            TODO: could add more outputs here
         
         '''
-        step_output = self.step(batch, 'val')
-        outputs = {'pred': step_output['pred']}
-        return outputs
-    
+        return self.step(batch, 'val')
+        
     def validation_epoch_end(self, outputs):
         ''' Log metrics from the output of the last validation step
         
@@ -140,7 +143,7 @@ class PytorchLightningWrapper(pl.LightningModule):
 
     def train_dataloader(self):
         ''' Return the training dataloader '''
-        split = 'train' if not run_params['debug'] else 'val'
+        split = 'train' if not run_params['debug_mode'] else 'val'
         return self.get_dataloaders(split, shuffle=True)
     
     def val_dataloader(self):
@@ -173,7 +176,7 @@ def main():
     ckpt_path = utils.load_checkpoint(model_name, run_params['load_model'])
 
     # Set environment
-    n_gpus_to_use = utils.set_environment(run_params['num_workers'])
+    accelerator, devices = utils.set_environment(run_params['num_workers'])
     
     # Callbacks for logging and checkpointing
     callbacks = [LearningRateMonitor(logging_interval='step'),
@@ -191,7 +194,8 @@ def main():
 
     # Set a trainer to train the model
     trainer = pl.Trainer(default_root_dir='logs',
-                         gpus=n_gpus_to_use,
+                         accelerator=accelerator,
+                         devices=devices,
                          auto_lr_find=run_params['find_best_lr'],
                          accumulate_grad_batches=4,
                          gradient_clip_val=0.0,

@@ -83,8 +83,9 @@ def set_environment(num_workers):
     """
     if num_workers > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
-    n_gpus_to_use = 1 if torch.cuda.is_available() else 0
-    return n_gpus_to_use
+    accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
+    devices = 1 if accelerator == 'gpu' else num_workers
+    return accelerator, devices
 
 
 class NoamLRLambda(_LRScheduler):
