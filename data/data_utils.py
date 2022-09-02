@@ -191,19 +191,24 @@ class JsonReader(IterDataPipe):
     def __iter__(self):
         for _, stream in self.dp:
            yield json.loads(stream)
-    
-    
-class GloveJsonReader(IterDataPipe):
-    """ Create left/right context and co-occurrence lists and yields samples """
-    def __init__(self, data_dir, split, tokenizer):
-        raw_cooc = create_cooc(JsonReader(data_dir, split))
-        filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # no idea about min_cooc
+
+
+class GloveMaker(IterDataPipe):
+    """ Go through the source data pipeline, compute co-occurence matrix and
+        load it to memory, then get ready to yield the computed samples
+    """
+    def __init__(self, dp, tokenizer):
+        # Compute the co-occurence matrix
+        raw_cooc = create_cooc(list(dp))
+        filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # good value for min_cooc?
         left, right, cooc = format_cooc(filtered_cooc)
         
+        # Encode input tokens and update label dtype (to compute loss)
         left = encode_fn(left, tokenizer)
         right = encode_fn(right, tokenizer)
         cooc = (float(i) for i in cooc)
         
+        # Load data pipeline to memory
         self.dp = [{'left': l, 'right': r, 'cooc': c}
                     for l, r, c in zip(left, right, cooc)]
 
@@ -245,14 +250,16 @@ class Encoder(IterDataPipe):
     """ Encode tokens to token ids using the given encoder function.
         Input pipe can consist of a dict of batched lists or a batched list.
     """
-    def __init__(self, dp, tokenizer, data_keys=[]):
+    def __init__(self, dp, tokenizer):
         self.dp = dp
         self.encode_fn = partial(encode_fn, tokenizer=tokenizer)
-        self.data_keys = data_keys
+        self.data_keys = None
     
     def __iter__(self):
         for batch in tqdm(self.dp, desc='Tokenizing dataset'):
-            if len(self.data_keys) > 0:
+            if type(batch) is dict:
+                if self.data_keys is None:
+                    self.data_keys = batch[0].keys()  # not sure if working
                 ids = {key: self.encode_fn([s[key] for s in batch])
                             for key in self.data_keys}
                 yield [dict(zip(ids, t)) for t in zip(*ids.values())]
@@ -264,14 +271,16 @@ class Padder(IterDataPipe):
     """ Pad each element of a batch, so that it can be put in a tensor.
         Input pipe can consist of a dict of batched lists or a batched list.
     """
-    def __init__(self, dp, special_ids, max_len, data_keys=[]):
+    def __init__(self, dp, special_ids, max_len):
         self.dp = dp
         self.pad_fn = partial(pad_fn, **special_ids, max_len=max_len)
-        self.data_keys = data_keys
+        self.data_keys = None
     
     def __iter__(self):
         for batch in self.dp:
-            if len(self.data_keys) > 0:
+            if type(batch) is dict:
+                if self.data_keys is None:
+                    self.data_keys = batch[0].keys()  # not sure if working
                 yield {key: self.pad_fn(batch[key]) for key in self.data_keys}
             else:
                 yield self.pad_fn(batch)

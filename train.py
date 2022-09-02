@@ -21,11 +21,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Load data pipeline
         self.pipeline = data.DataPipeline(data_params['data_dir'],
                                           data_params['data_subdir'],
-                                          data_params['data_keys'],
                                           run_params['debug_mode'],
+                                          run_params['encoding'],
                                           train_params['max_tokens_per_batch'],
-                                          model_params['special_tokens'],
-                                          run_params['encoding'])
+                                          model_params['special_tokens'])
         
         # Load model and some useful parameters
         model_params['vocab_size'] = len(self.pipeline.tokenizer.encoder)
