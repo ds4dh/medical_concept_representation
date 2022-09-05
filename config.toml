@@ -1,7 +1,7 @@
 [run]
-  model_used = 'glove'  # 'fasttext', 'glove', 'elmo', 'bert'
+  model_used = 'fasttext'  # 'fasttext', 'glove', 'elmo', 'bert'
   model_id = 'test'
-  encoding = 'word'  # 'word' / 'subword'
+  ngram_len = 3  # 0 for word encoding, > 0 for subword encoding
   debug_mode = true
   load_model = false
   load_tokenizer = true
@@ -13,7 +13,7 @@
   data_dir = './data/json'  # '/mnt/d/DL/datasets/autophe/json' - './data/json'
   data_subdir = 'time_not_categorized'
   log_dir = './logs'
-  max_len = 512
+  max_seq_len = 512
   # [data.special_tokens]
   #   ':OK' = 101
   #   ':AB' = 102

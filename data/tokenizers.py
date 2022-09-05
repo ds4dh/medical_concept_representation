@@ -8,19 +8,33 @@ class Tokenizer():
     """
     Word-level tokenizer.
     """
-    def __init__(self, special_tokens):
+    def __init__(self, special_tokens, min_freq=0):
         self.encoder = None
-        self.special_tokens = special_tokens
+        self.special_tokens = dict(special_tokens)
+        self.min_freq = min_freq
 
     def fit(self, words):
+        print('Training tokenizer')
         assert isinstance(words, list)
-        unique_words, count = np.unique(words, return_counts=True)
-        inds = count.argsort()[::-1]
+        
+        # Compute and sort vocabulary
+        unique_words, word_counts = np.unique(words, return_counts=True)
+        if self.min_freq > 0:  # remove rare words
+            unique_words = unique_words[word_counts > self.min_freq]
+            word_counts = word_counts[word_counts > self.min_freq]
+        inds = word_counts.argsort()[::-1]
         unique_words = unique_words[inds]
 
+        # Generate word level encoder
         self.encoder = self.special_tokens
         self.encoder.update({i: (idx + len(self.special_tokens))
                              for idx, i in enumerate(unique_words)})
+                
+        # Store word count for every word (useful for skipgram dataset)
+        self.word_counts = {self.encoder[word]: count for word, count in \
+                            zip(unique_words, sorted(word_counts)[::-1])}
+
+        # Decoder
         self.decoder = {v: k for k, v in self.encoder.items()}
 
     def encode(self, word):
@@ -28,78 +42,103 @@ class Tokenizer():
             return self.encoder[word]
         except:
             return self.encoder['[UNK]']
+    
+    def decode(self, token_id):
+        return self.decoder[token_id]
 
 
 class SubWordTokenizer():
     """
     Subword-level tokenizer.
     """
-    def __init__(self, ngram_len, special_tokens):
+    def __init__(self, ngram_len, special_tokens, min_freq=0):
         self.encoder = None
         self.ngram_len = ngram_len
-        self.special_tokens = special_tokens
+        self.special_tokens = dict(special_tokens)  # copy
+        self.min_freq = min_freq
         
     @staticmethod
+    # TODO: see what type of ngram we want (Dimitris had an idea)
     def _generate_ngram(text, ngram_len):
-        return ["".join(i) for i in ngrams(text, ngram_len)]
+        return [''.join(i) for i in ngrams(text, ngram_len)]
     
     @staticmethod
     def _flatten(t):
         return [item for sublist in t for item in sublist]
     
     def fit(self, words):
+        print('Training tokenizer')
         assert isinstance(words, list)
-        # Compute and sort vocabulary.
-        unique_words, count = np.unique(words, return_counts=True)
-        inds = count.argsort()[::-1]  # most occurent first
+
+        # Compute and sort vocabulary
+        unique_words, word_counts = np.unique(words, return_counts=True)
+        if self.min_freq > 0:  # remove rare words
+            unique_words = unique_words[word_counts > self.min_freq]
+            word_counts = word_counts[word_counts > self.min_freq]
+        inds = word_counts.argsort()[::-1]  # most occurent first
         unique_words = unique_words[inds]
 
-        # Add angular brackets to unique words.
-        angular_words = ["<" + i + ">" for i in unique_words]
+        # Add angular brackets to indicate whole words
+        unique_whole_words = ['<' + i + '>' for i in unique_words]
 
-        # Compute and sort ngram vocabulary.
-        unique_angular_ngrams = [self._generate_ngram(
-            i, self.ngram_len) for i in angular_words]
-        self.max_len_ngram = max([len(i) for i in unique_angular_ngrams])
-        unique_angular_ngrams = self._flatten(unique_angular_ngrams)
-        unique_angular_ngrams, count = np.unique(
-            unique_angular_ngrams, return_counts=True)
-        inds = count.argsort()[::-1]
-        unique_angular_ngrams = unique_angular_ngrams[inds]
+        # Compute ngram vocabulary
+        unique_ngrams = [self._generate_ngram(word, self.ngram_len)
+                         for word in unique_whole_words]
+        unique_ngrams = self._flatten(unique_ngrams)
+        unique_ngrams = [ngram for ngram in unique_ngrams
+                         if not (ngram[0] == '<' and ngram[-1] == '>')]
 
-        # Generate word level encoder.
+        # Sort ngram vocabulary
+        unique_ngrams, ngram_counts = np.unique(unique_ngrams,
+                                                return_counts=True)
+        inds = ngram_counts.argsort()[::-1]
+        unique_ngrams = unique_ngrams[inds]
+
+        # Generate word level encoder (using '<...>' words!)
         self.encoder = self.special_tokens
-        self.encoder.update({i: (idx + len(self.special_tokens))
-                             for idx, i in enumerate(unique_words)})
-        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.encoder.update({word: (i + len(self.special_tokens))
+                             for i, word in enumerate(unique_whole_words)})
         
-        # Generate ngram level encoder.
-        self.ngram_encoder = self.special_tokens
-        self.ngram_encoder.update(
-            {i: (idx + len(self.special_tokens))
-             for idx, i in enumerate(unique_angular_ngrams)})
+        # Store word count for every word (useful for skipgram dataset)
+        self.word_counts = {self.encoder[word]: count for word, count in \
+                            zip(unique_whole_words, sorted(word_counts)[::-1])}
+
+        # Update encoder with ngram level vocabulary
+        len_so_far = len(self.encoder)
+        self.encoder.update(
+            {i: (idx + len_so_far) for idx, i in enumerate(unique_ngrams)})
+
+        # Decoder
+        self.decoder = {v: k for k, v in self.encoder.items()}
 
     def encode(self, word):
-        # Word level encoder.
-        ind = []
-        try:
-            ind.append(self.encoder[word])
-        except:
-            ind.append(self.encoder['[UNK]'])
-
-        # Ngram level encoder.
-        lst = self._generate_ngram("<" + word + ">", self.ngram_len)
-        seq = lst + ["[PAD]"] * (self.max_len_ngram - len(lst))
+        # Generate n-grams and add them to the word
+        angular_word = '<' + word + '>'
+        seq = [angular_word]
+        if len(word) > 1:
+            seq += self._generate_ngram(angular_word, self.ngram_len)
+        # seq = lst + ['[PAD]'] * (self.max_len_ngram - len(lst))
         
-        for ng in seq:
+        # Encode the word and the ngram
+        indices = []
+        for word_or_ngram in seq:  # first in the list is the word itself
             try:
-                ind.append(self.ngram_encoder[ng])
+                indices.append(self.encoder[word_or_ngram])
             except:
-                ind.append(self.encoder['[UNK]'])
+                indices.append(self.encoder['[UNK]'])
 
-        return ind
+        return indices
+    
+    def decode(self, token_id_or_ids):
+        if type(token_id_or_ids) == list:
+            return self.decoder[token_id_or_ids[0]][1:-1]
+        elif type(token_id_or_ids) == int:
+            return self.decoder(token_id_or_ids)
+        else:
+            raise TypeError('Invalid token format: %s' % type(token_id_or_ids))
 
 
+# TODO: put this at a better place (data_utils?)
 def display_pca_scatterplot(model, words=None, sample=0):
     if words == None:
         if sample > 0:

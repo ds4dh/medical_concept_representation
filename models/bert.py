@@ -6,7 +6,7 @@ import math
 
 class BERT(nn.Module):
     """ BERT: Bidirectional Encoder Representations from Transformers. """
-    def __init__(self, vocab_size, special_tokens, max_len, d_embed, d_ff,
+    def __init__(self, vocab_size, special_tokens, max_seq_len, d_embed, d_ff,
                  n_layers, n_heads, dropout=0.1, *args, **kwargs):
         """
         :param voc_size: voc_size of total words
@@ -26,7 +26,7 @@ class BERT(nn.Module):
 
         # embedding for BERT, sum of positional, segment, token embeddings
         self.embedding = BERTEmbedding(vocab_size=vocab_size,
-                                       max_len=max_len,
+                                       max_len=max_seq_len,
                                        d_embed=d_embed)
 
         # multi-layers transformer blocks, deep network

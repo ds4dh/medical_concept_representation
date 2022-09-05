@@ -14,17 +14,17 @@ class FastText(nn.Module):
 
         Args:
             center (torch.Tensor): center word whose context is to be predicted
-            - shape: (batch_size, d_embed) if word-level encoding
-                     (batch_size, N > 1, d_embed) if subword-level encoding
+            - shape: (batch_size) if word-level encoding
+                     (batch_size, N > 1) if subword-level encoding
 
         Returns:
             torch.Tensor of shape (batch_size, vocab_size): context word logits
             
         """
-        y = self.embed(center)  # (batch_size, seq_len, vec_dim)
+        y = self.embed(center)  # (batch_size [, n_subwords + 1], d_embed)
         if len(y.shape) == 3:
-            y = torch.mean(y, dim=1)  # average subwords embeddings
-        return self.fc(y)  # (batch_size, label_size)
+            y = torch.mean(y, dim=1)  # average over [word + subwords] dimension
+        return self.fc(y)  # (batch_size, vocab_size)
 
     def get_embeddings(self):
         ...

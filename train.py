@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+import warnings
+warnings.filterwarnings('ignore', category=pl.utilities.warnings.PossibleUserWarning)
 
 
 parser = argparse.ArgumentParser(description='Train and test model.')
@@ -21,8 +23,9 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Load data pipeline
         self.pipeline = data.DataPipeline(data_params['data_dir'],
                                           data_params['data_subdir'],
+                                          data_params['max_seq_len'],
                                           run_params['debug_mode'],
-                                          run_params['encoding'],
+                                          run_params['ngram_len'],
                                           train_params['max_tokens_per_batch'],
                                           model_params['special_tokens'])
         

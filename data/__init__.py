@@ -5,7 +5,7 @@ from .data_utils import (
     Encoder,
     SkipGramMaker,
     GloveMaker,
-    DynamicBucketBatcher,
+    DynamicBatcher,
     DictUnzipper,
     Encoder,
     Padder,
