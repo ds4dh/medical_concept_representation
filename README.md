@@ -40,3 +40,22 @@ Each model should be a standard PyTorch model and follow the input / output spec
 
 A single PyTorch Lightning (PL) wrapper (see example in train.py) will then handle the interactions between all models and the dataset.
 PL defines all experiment scripts such as training (reconstruct patient admission sequences) and testing (producing concept embeddings) functions.
+
+## New structure
+
+- Two tokenization paradigms:
+    - Code level:
+        - Static embeddings:
+            - GloVe (Anthony)
+            - Fasttext (Alban)
+        - Contextualised embeddings:
+            - ELMo (Alban)
+            - BERT (Anthony & Dim)
+    - Sub-code level:
+        - Static embeddings:
+            - GloVe (ngram) (Anthony)
+            - Fasttext (ngram) (Alban)
+        - Contextualised embeddings:
+            - ELMo (char) (Alban)
+            - ELMo (ngram) (?)
+            - BERT (ngram) (Anthony)
