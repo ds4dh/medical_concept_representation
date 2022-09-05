@@ -142,8 +142,7 @@ class PytorchLightningWrapper(pl.LightningModule):
 
     def train_dataloader(self):
         ''' Return the training dataloader '''
-        split = 'train' if not run_params['debug_mode'] else 'val'
-        return self.get_dataloaders(split, shuffle=True)
+        return self.get_dataloaders('train', shuffle=True)
     
     def val_dataloader(self):
         ''' Return the validation dataloader '''
@@ -158,7 +157,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         optim_params = {'params': self.parameters(),
                         'lr': self.learning_rate,
                         'betas': train_params['adam_betas']}
-        optim = torch.optim.AdamW(**optim_params)
+        optim = torch.optim.Adam(**optim_params)
         sched_params = {'optimizer': optim,
                         'd_embed': model_params['d_embed'],
                         'n_warmup_steps': train_params['n_warmup_steps']}

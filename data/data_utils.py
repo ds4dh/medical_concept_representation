@@ -92,21 +92,6 @@ def compute_len(sample):
         raise TypeError(f'Bad input type {type(sample)}')
 
 
-def encode_fn(batch_or_sample, tokenizer):
-    """ Encode input tokens with a tokenizer
-    
-    Args:
-        batch_or_sample (set of sequences or sequence): sequence(s) to encode
-        tokenizer (tokenizers.Tokenizer): tokenizer used to encode tokens
-    
-    Returns:
-        iterable of lists: tokenized batch
-    
-    """
-    # For now I do it simple, but we could do by batch (not sure if impactful)
-    return (tokenizer.encode(word) for word in batch_or_sample)
-
-
 def encapsulate_fn(sequence, bos_id, eos_id):
     """ Add start and end tokens to one sequence of tokens
     
@@ -151,11 +136,10 @@ def create_cooc(document):
     # occurrences = {name: {name: 0 for name in names} for name in names}
 
     # Find the co-occurrences:
-    for l in tqdm(document, leave=False, desc='Filling co-occurrence matrix'):
-        for i in range(len(l)):
-            for item in l[:i] + l[i + 1:]:
-                occurrences[l[i]][item] += 1
-
+    for sample in tqdm(document, desc='Filling co-occurrence matrix'):
+        for i, center in enumerate(sample):
+            for context in sample[:i] + sample[i + 1:]:
+                occurrences[center][context] += 1
     return occurrences
 
 
@@ -164,21 +148,40 @@ def filter_cooc(occurrences, min_cooc):
                           because GloVe is a log-regression model.'
     # Filter based on min_cooc:
     occ = occurrences.copy()
-    for k, v in tqdm(occ.items(), leave=False):
+    for k, v in tqdm(occ.items(), desc='Filtering co-occurence matrix'):
         occ[k] = {x: y for x, y in v.items() if y >= min_cooc}
     return occ
 
 
 def format_cooc(cooc):
-    left, right, cooc_int = list(), list(), list()
+    samples = list()
     for l_dict_str, r_dict in cooc.items():
         for r_dict_str, cooc_i in r_dict.items():
-            left.append(str(l_dict_str))
-            right.append(str(r_dict_str))
-            cooc_int.append(int(cooc_i))
-    return left, right, cooc_int
+            samples.append({'left': l_dict_str,
+                            'right': r_dict_str,
+                            'cooc': float(cooc_i)})
+    return samples
 
 
+def create_skipgram(document, context_size):
+    ''' Generate a set of (context, target) pairs and build the batch
+        as a batched tensor for the continuous bag of words task.
+    '''
+    sample_pairs = list()
+    for sentence in tqdm(document, desc='Creating skipgram sample pairs'):
+        for center_pos, center_word in enumerate(sentence):
+            for i in range(-context_size, context_size + 1):
+                context_pos = center_pos + i
+                if context_pos < 0 \
+                or context_pos >= len(sentence) \
+                or i == 0:  # same word
+                    continue
+                context_word = sentence[context_pos]
+                sample_pairs.append({'center': center_word,
+                                     'context': context_word})
+    return sample_pairs
+                
+                
 class JsonReader(IterDataPipe):
     """ Combined pipeline to list, select, open, read and parse a json file """
     def __init__(self, data_dir, split):
@@ -193,32 +196,67 @@ class JsonReader(IterDataPipe):
            yield json.loads(stream)
 
 
+class Encoder(IterDataPipe):
+    def __init__(self, dp, tokenizer, encoding='word'):
+        self.dp = dp
+        self.tokenizer = tokenizer
+        assert encoding in ('word', 'subword')
+        self.use_ngrams = (encoding == 'subword')
+        
+    def __iter__(self):
+        for sample in self.dp:
+            if self.use_ngrams:
+                yield [[self.tokenizer.encode(subword) \
+                        for subword in subwords] for subwords in sample]
+            else:
+                yield [self.tokenizer.encode(word) for word in sample]
+        
+
 class GloveMaker(IterDataPipe):
-    """ Go through the source data pipeline, compute co-occurence matrix and
-        load it to memory, then get ready to yield the computed samples
+    """ Compute co-occurence matrix from the source pipeline, and load it to
+        memory as a flat array, then get ready to yield the computed samples
     """
-    def __init__(self, dp, tokenizer):
+    def __init__(self, dp):
         # Compute the co-occurence matrix
         raw_cooc = create_cooc(list(dp))
         filtered_cooc = filter_cooc(raw_cooc, min_cooc=10)  # good value for min_cooc?
-        left, right, cooc = format_cooc(filtered_cooc)
+        self.dp = format_cooc(filtered_cooc)
         
-        # Encode input tokens and update label dtype (to compute loss)
-        left = encode_fn(left, tokenizer)
-        right = encode_fn(right, tokenizer)
-        cooc = (float(i) for i in cooc)
-        
-        # Load data pipeline to memory
-        self.dp = [{'left': l, 'right': r, 'cooc': c}
-                    for l, r, c in zip(left, right, cooc)]
-
     def __iter__(self):
+        # Sample format: {'left': token_id, 'right': token_id, 'cooc': float}
+        for sample in self.dp:
+            yield sample
+
+
+class SkipGramMaker(IterDataPipe):
+    """ Compute all possible skipgram pairs from the source pipeline and load
+        them to memory, then get ready to yield the computed sample pairs
+    """
+    def __init__(self, dp):
+        self.dp = create_skipgram(dp, context_size=2)
+    
+    def __iter__(self):
+        # Sample format: {'center': token_id, 'context': token_id}
+        for sample in self.dp:
+            yield sample
+
+
+class DynamicMasker(IterDataPipe):
+    def __init__(self, dp, special_ids):
+        self.dp = dp
+        self.mask_id = special_ids['[MASK]']
+        # TODO: implement dynamic masking
+    
+    def __iter__(self):
+        # Sample format: {'masked': list of token_ids, 'target': same}
         for sample in self.dp:
             yield sample
 
             
 class DictUnzipper(IterDataPipe):
-    """ Take an iterable of dicts and unzip it to a dict of iterables """
+    """ Take a batch of dicts and unzip it to the corresponding dict of batches
+        Example: [{'src': ..., 'tgt': ...}, ...] -> {'src': [...], 'tgt': [...]}
+    """
     def __init__(self, dp):
         self.dp = dp
         self.data_keys = None
@@ -246,27 +284,6 @@ class DynamicBucketBatcher(IterDataPipe):
             yield batch
 
 
-class Encoder(IterDataPipe):
-    """ Encode tokens to token ids using the given encoder function.
-        Input pipe can consist of a dict of batched lists or a batched list.
-    """
-    def __init__(self, dp, tokenizer):
-        self.dp = dp
-        self.encode_fn = partial(encode_fn, tokenizer=tokenizer)
-        self.data_keys = None
-    
-    def __iter__(self):
-        for batch in tqdm(self.dp, desc='Tokenizing dataset'):
-            if type(batch) is dict:
-                if self.data_keys is None:
-                    self.data_keys = batch[0].keys()  # not sure if working
-                ids = {key: self.encode_fn([s[key] for s in batch])
-                            for key in self.data_keys}
-                yield [dict(zip(ids, t)) for t in zip(*ids.values())]
-            else:
-                yield self.encode_fn(batch)
-
-
 class Padder(IterDataPipe):
     """ Pad each element of a batch, so that it can be put in a tensor.
         Input pipe can consist of a dict of batched lists or a batched list.
@@ -284,13 +301,7 @@ class Padder(IterDataPipe):
                 yield {key: self.pad_fn(batch[key]) for key in self.data_keys}
             else:
                 yield self.pad_fn(batch)
-
-
-class DynamicMasker(IterDataPipe):
-    def __init__(self, dp, special_ids):
-        self.dp = dp
-        # TODO: implement this (dynamic masking)
-        
+                
 
 class Torcher(IterDataPipe):
     """ Transform a batch of iterables in a tensor of the same dimensions.
@@ -301,7 +312,7 @@ class Torcher(IterDataPipe):
 
     def __iter__(self):
         for batch in self.dp:
-            if type(batch) is dict:  # len(self.data_keys) > 0:
+            if type(batch) is dict:
                 yield {key: torch.tensor(batch[key]) for key in batch.keys()}
             else:
                 yield torch.tensor(batch)

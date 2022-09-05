@@ -13,7 +13,6 @@
   data_dir = './data/json'  # '/mnt/d/DL/datasets/autophe/json' - './data/json'
   data_subdir = 'time_not_categorized'
   log_dir = './logs'
-  data_keys = []  # [] - ['text'] - ['src', 'tgt']
   max_len = 512
   # [data.special_tokens]
   #   ':OK' = 101
@@ -30,6 +29,8 @@
 [models]
   [models.fasttext]
     task = 'skipgram'  # 'cbow'?
+    input_keys = ['center']
+    label_keys = ['context']
     d_embed = 256
     [models.fasttext.special_tokens]
       '[PAD]' = 0

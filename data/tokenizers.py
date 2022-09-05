@@ -71,6 +71,7 @@ class SubWordTokenizer():
         self.encoder = self.special_tokens
         self.encoder.update({i: (idx + len(self.special_tokens))
                              for idx, i in enumerate(unique_words)})
+        self.decoder = {v: k for k, v in self.encoder.items()}
         
         # Generate ngram level encoder.
         self.ngram_encoder = self.special_tokens

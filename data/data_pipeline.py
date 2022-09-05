@@ -12,23 +12,28 @@ class DataPipeline():
         self.data_dir = data_dir
         self.data_subdir = data_subdir
         self.data_fulldir = os.path.join(data_dir, data_subdir)
+        self.debug = debug  # will take a smaller dataset for training
         
         # Train and load tokenizer
         self.max_tokens = max_tokens_per_batch
-        self.tokenizer = self.get_tokenizer(encoding, special_tokens, debug)
+        self.tokenizer = self.get_tokenizer(encoding, special_tokens)
     
-    # TODO: MAKE THIS A SKIPGRAM PIPELINE
     def skipgram_pipeline(self, split, shuffle=False):
         dp = data.JsonReader(self.data_fulldir, split)
+        dp = data.Encoder(dp, self.tokenizer)
+        dp = data.SkipGramMaker(dp)
+        dp = Batcher(dp, batch_size=self.max_tokens)
+        dp = data.DictUnzipper(dp)
         if shuffle: dp = Shuffler(dp)
         return data.Torcher(dp)
     
     def cooc_pipeline(self, split, shuffle=False):
         dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.GloveMaker(dp, self.tokenizer)
+        dp = data.Encoder(dp, self.tokenizer)
+        dp = data.GloveMaker(dp)
         dp = Batcher(dp, batch_size=self.max_tokens)
-        dp = data.DictUnzipper(dp)  # batch of dicts to dict of batches
-        if shuffle: dp = Shuffler(dp)  # shuffle at the batch level
+        dp = data.DictUnzipper(dp)
+        if shuffle: dp = Shuffler(dp)
         return data.Torcher(dp)
 
     # TODO: MAKE THIS AN MLM PIPELINE
@@ -40,10 +45,13 @@ class DataPipeline():
         # dp = DynamicMasker(dp) --> FOR THE TODO: TYPICALLY HERE
         dp = data.Padder(dp, self.special_ids, self.max_len)
         if shuffle: dp = Shuffler(dp)
-        return data.Torcher(dp, self.data_keys)
+        return data.Torcher(dp)
 
     def get_pipeline(self, task, split, shuffle=False):
         print(f'Building {split} pipeline for {task} task.')
+        if self.debug and split == 'train':
+            print('Using validation data for training in debug mode.')
+            split = 'val'
         if task == 'skipgram':
             return self.skipgram_pipeline(split, shuffle)
         if task == 'cooc':
@@ -53,7 +61,7 @@ class DataPipeline():
         else:
             raise Exception('Invalid task given to the pipeline.')
     
-    def get_tokenizer(self, encoding, special_tokens, debug=False):
+    def get_tokenizer(self, encoding, special_tokens):
         # Load the tokenizer
         if encoding == 'word':
             tokenizer = data.Tokenizer(special_tokens)
@@ -63,10 +71,10 @@ class DataPipeline():
             raise Exception('Invalid encoding scheme given to the pipeline.')
         
         # Train the tokenizer with the training data (validation if debug mode)
-        print('Training tokenizer')
         tokenizer_training_batches = []
-        for batch in tqdm(data.JsonReader(self.data_fulldir,
-                                          split='val' if debug else 'train')):
+        split = 'val' if self.debug else 'train'
+        for batch in tqdm(data.JsonReader(self.data_fulldir, split),
+                          desc='Training tokenizer'):
             tokenizer_training_batches.extend(batch)
         tokenizer.fit(tokenizer_training_batches)
 
