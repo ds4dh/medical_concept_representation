@@ -42,9 +42,7 @@ def load_model_and_params_from_config(config_path):
 def load_checkpoint(model_name, model_version, load_model, **kwargs):
     """ Try to load a model checkpoint from the log directory
         Note: if checkpoint is not found, returns None and start from scratch
-        Note: if a load_model == False, the logs of this model will be erased
-        TODO: change this using version numbers, to avoid erasing automatically
-    
+        
     Args:
         model_name (str): name that identifies the model uniquely
         load_model (bool): whether the model uses a checkpoint
@@ -85,6 +83,17 @@ def load_checkpoint(model_name, model_version, load_model, **kwargs):
 
 
 def update_and_save_config(config_path, run_params, model_name, new_model_version):
+    """ Update the configuration parameters and save it as a .toml file in the
+        model logs folder, so that all parameters are known for that run
+
+    Args:
+        config_path (str): path to the original configuration file of the run
+        run_params (dict): parameters whose model_version might be updated
+        model_name (str): exact name of the model being run
+        new_model_version (int): model version that might have been changed to
+            avoid erasing an existing model checkpoint
+        
+    """
     # Find config paths
     old_config_path = config_path
     new_logdir = os.path.join('logs', model_name, f'version_{new_model_version}')
@@ -94,9 +103,9 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
     old_model_version = run_params['model_version']
     run_params['model_version'] = new_model_version
     
-    # Set version string to replace in the new config file
+    # Set version string to replace in the written config file
     to_replace = f'model_version = {old_model_version}'
-    replace_by = f'model_version = {new_model_version}'
+    replace_by = f'model_version = {new_model_version}'  # might be the same
     
     # Write config file for this run
     with open(new_config_path, 'w') as new_config_file:
