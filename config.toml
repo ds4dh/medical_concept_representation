@@ -1,16 +1,16 @@
+# TODO: SAVE CONFIG FILE IN THE LOGS
 [run]
   model_used = 'fasttext'  # 'fasttext', 'glove', 'elmo', 'bert'
   model_id = 'test'
   ngram_len = 3  # 0 for word encoding, > 0 for subword encoding
-  debug_mode = true
+  debug_mode = false
   load_model = false
   load_tokenizer = true
-  find_best_lr = false
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
-  data_dir = './data/json'  # '/mnt/d/DL/datasets/autophe/json' - './data/json'
+  data_dir = '/mnt/d/DL/datasets/autophe/json'  # '/mnt/d/DL/datasets/autophe/json', './data/json'
   data_subdir = 'time_not_categorized'
   log_dir = './logs'
   max_seq_len = 512
@@ -23,8 +23,8 @@
   adam_betas = [0.9, 0.998]
   accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
-  n_steps = 500000
-  n_warmup_steps = 8000
+  n_steps = 100000
+  n_warmup_steps = 10000
 
 [models]
   [models.fasttext]
@@ -47,16 +47,17 @@
       
   [models.bert]
     task = 'mlm'
+    input_keys = ['masked']
+    label_keys = ['masked', 'target']
     n_layers = 4
-    max_len = 512
     d_embed = 256
     d_ff = 2048
     n_heads = 8
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0
-      '[CLS]' = 1
-      '[SEP]' = 2
-      '[END]' = 3
-      '[UNK]' = 4
+      '[UNK]' = 1
+      '[CLS]' = 2
+      '[SEP]' = 3
+      '[END]' = 4
       '[MASK]' = 5

@@ -18,39 +18,63 @@ class BERT(nn.Module):
         """
         super().__init__()
         self.pad_id = special_tokens['[PAD]']
+        self.mask_id = special_tokens['[MASK]']
         self.d_embed = d_embed
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.d_ff = d_ff
-        self.loss_fn = nn.NLLLoss()  # ??? check for mlm and log-softmax etc
+        self.loss_fn = BertLoss(mask_id=self.mask_id)
 
-        # embedding for BERT, sum of positional, segment, token embeddings
+        # Sum of positional, segment and token embeddings
         self.embedding = BERTEmbedding(vocab_size=vocab_size,
                                        max_len=max_seq_len,
                                        d_embed=d_embed)
 
-        # multi-layers transformer blocks, deep network
+        # Multi-layers transformer blocks, deep network
         self.transformer_blocks = nn.ModuleList(
             [TransformerBlock(d_embed, n_heads, d_ff, dropout) \
                 for _ in range(n_layers)])
 
-    def forward(self, x, segment_labels=None):
-        # attention masking for padded token
-        # torch.ByteTensor([batch_size, 1, seq_len, seq_len])
-        mask = (x != self.pad_id).unsqueeze(1) \
-                                 .repeat(1, x.size(1), 1) \
-                                 .unsqueeze(1)
+        # Final projection to predict words for each masked token
+        self.final_proj = nn.Linear(d_embed, vocab_size)  # just to try
 
-        # embedding the indexed sequence to sequence of vectors
+    def forward(self, masked, segment_labels=None):
+        # Adapt the size of what is used to build the masks
+        input_for_masks = masked
+        if len(input_for_masks.shape) > 2:  # ngram case
+            input_for_masks = input_for_masks[:, :, 0]
+        
+        # Attention mask for padded token (batch_size, 1, seq_len, seq_len)
+        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1) \
+                    .repeat(1, masked.size(1), 1).unsqueeze(1)
+
+        # Embed token_id sequences to vector sequences
         if segment_labels == None:
-            segment_labels = torch.ones_like(x, dtype=torch.int)
-        x = self.embedding(x, segment_labels)
+            segment_labels = torch.ones_like(input_for_masks, dtype=torch.int)
+        x = self.embedding(masked, segment_labels)
 
-        # running over multiple transformer blocks
+        # Run through all transformer blocks
         for transformer in self.transformer_blocks:
-            x = transformer.forward(x, mask)
+            x = transformer.forward(x, pad_mask)
 
-        return x
+        # Record embedding and return a vocabulary-sized vector for each token
+        voc_projection = self.final_proj(x)
+        return voc_projection
+
+
+class BertLoss(nn.Module):
+    def __init__(self, mask_id):
+        super().__init__()
+        self.mask_id = mask_id
+        self.log_softmax = nn.LogSoftmax(dim=-1)
+        self.nlll_loss = nn.NLLLoss()
+
+    def forward(self, model_output, masked, target):
+        logits = self.log_softmax(model_output)
+        if len(masked.shape) > 2:  # ngram case
+            masked = masked[:, :, 0]
+        mask_locations = torch.where(masked == self.mask_id)
+        return self.nlll_loss(logits[mask_locations], target[mask_locations])
 
 
 class TransformerBlock(nn.Module):
@@ -190,7 +214,14 @@ class BERTEmbedding(nn.Module):
         self.d_embed = d_embed
 
     def forward(self, sequence, segment_labels):
-        x = self.tok(sequence) + self.pos(sequence) + self.seg(segment_labels)
+        # For token_embeddings, sum over ngram dimension if existing
+        token_embeddings = self.tok(sequence)
+        if len(token_embeddings.shape) > 3:
+            # (batch, seq, ngram, d_embed) -> (batch, seq_len, d_embed)
+            token_embeddings = token_embeddings.mean(dim=-2)
+        
+        # Add the other embeddings
+        x = token_embeddings + self.pos(sequence) + self.seg(segment_labels)
         return self.dropout(x)
 
 

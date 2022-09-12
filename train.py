@@ -29,9 +29,12 @@ class PytorchLightningWrapper(pl.LightningModule):
                                           train_params['max_tokens_per_batch'],
                                           model_params['special_tokens'])
         
-        # Load model and some useful parameters
+        # Update model parameters and load model
         model_params['vocab_size'] = len(self.pipeline.tokenizer.encoder)
+        model_params['max_seq_len'] = data_params['max_seq_len']
         self.model = model(**model_params)
+        
+        # Some useful parameters for the run
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
         self.learning_rate = train_params['lr']
@@ -39,7 +42,7 @@ class PytorchLightningWrapper(pl.LightningModule):
     def step(self, batch, mode):
         ''' Proceed forward pass of the mode ('train' or 'val'), compute loss
             Note: the loss function used to compute the loss is model-specific
-        
+                
         Params:
         -------
         batch: dict
@@ -52,6 +55,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         dict: dictionary containing the loss (could contain more stuff)
         
         '''
+        # import pdb; pdb.set_trace()
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         outputs = self.model(**inputs)
@@ -60,41 +64,14 @@ class PytorchLightningWrapper(pl.LightningModule):
         return {'loss': loss}  #, 'output': output.cpu().detach()}
 
     def training_step(self, batch, batch_idx):
-        ''' Compute the training loss for backpropagation
-        
-        Params:
-        -------
-        batch: dict
-            Dictionary with the batch data of the training dataset
-        batch_idx: int
-            Index of the batch
-
-        Returns:
-        --------
-        dict
-            Dictionary with the training loss used for backpropagation
-            TODO: could add more outputs here
-        
-        '''
+        """ Perform training step and return loss (see step) """
         return self.step(batch, 'train')
-        
+            
     def validation_step(self, batch, batch_idx):
-        ''' Compute validation loss and correctly predicted tokens
-        
-        Params:
-        -------
-        batch: dict
-            Dictionary with the batch data of the validation dataset
-        batch_idx: int
-            Index of the batch
-
-        Returns:
-        --------
-        outputs: dict
-            Features that are used at the end of the validation step
-            TODO: could add more outputs here
-        
-        '''
+        # USEFULENESS OF VALIDATION SET? GOOD TO AVOID FITTING HYPERPARAMETERS ON THE TEST SET
+        # BUT APART FROM THAT, ONCE WE HAVE VALIDATED THE HYPERPARAMETERS, WE CAN USE VALIDATION + TRAINING AS TRAINING
+        # OR AT LEAST WE NEED TO EMBED ALL THE CONCEPTS (SO NOT LOOSING SOME OF THEM JUST BECAUSE WE WANT VALIDATION)
+        """ Perform validation step and return loss (see step) """
         return self.step(batch, 'val')
         
     def validation_epoch_end(self, outputs):
@@ -120,6 +97,9 @@ class PytorchLightningWrapper(pl.LightningModule):
                     
         '''
         pass  # TODO: implemement the pca visualization as in glove code
+
+    # def test_epoch_end(output):
+    #     model.export_as_gensim(output)
 
     def get_dataloaders(self, split, shuffle):
         ''' Generic function to initialize and return a dataloader
@@ -197,7 +177,6 @@ def main():
     trainer = pl.Trainer(default_root_dir='logs',
                          accelerator=accelerator,
                          devices=devices,
-                         auto_lr_find=run_params['find_best_lr'],
                          accumulate_grad_batches= \
                             train_params['accumulate_grad_batches'],
                          gradient_clip_val=0.0,
@@ -208,7 +187,6 @@ def main():
                          logger=logger)
     
     # Train model
-    trainer.tune(model_data_wrapper)
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
 
 

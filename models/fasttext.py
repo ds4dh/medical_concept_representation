@@ -4,7 +4,7 @@ import torch.nn as nn
 
 class FastText(nn.Module): 
     def __init__(self, vocab_size, d_embed, *args, **kwargs):
-        super(FastText, self).__init__()
+        super().__init__()
         self.embed = nn.Embedding(vocab_size, d_embed)
         self.fc = nn.Linear(d_embed, vocab_size)
         self.loss_fn = FastTextLoss()
@@ -22,8 +22,8 @@ class FastText(nn.Module):
             
         """
         y = self.embed(center)  # (batch_size [, n_subwords + 1], d_embed)
-        if len(y.shape) == 3:
-            y = torch.mean(y, dim=1)  # average over [word + subwords] dimension
+        if len(y.shape) > 2:
+            y = torch.mean(y, dim=-2)  # average over [word + subwords] dimension
         return self.fc(y)  # (batch_size, vocab_size)
 
     def get_embeddings(self):
@@ -38,7 +38,6 @@ class FastText(nn.Module):
                                                  .replace(',', '') + '\n')
 
 class FastTextLoss(nn.Module):
-
     def __init__(self):
         super().__init__()
         self.log_softmax = nn.LogSoftmax(dim=-1)

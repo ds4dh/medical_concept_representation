@@ -47,6 +47,10 @@ class Tokenizer():
         return self.decoder[token_id]
 
 
+# IDEA: USE A SPECIFIC TOKENIZATION SCHEME THAT TAKES INTO ACCOUNT THE SCRUCTURE OF ICD (OR OTHER) CODES
+# [XX-16-AV] -> [[X] [XX] [XX-1] [XX-16] [XX-16-A] [XX-16-AV]]
+
+
 class SubWordTokenizer():
     """
     Subword-level tokenizer.
@@ -54,7 +58,7 @@ class SubWordTokenizer():
     def __init__(self, ngram_len, special_tokens, min_freq=0):
         self.encoder = None
         self.ngram_len = ngram_len
-        self.special_tokens = dict(special_tokens)  # copy
+        self.special_tokens = special_tokens
         self.min_freq = min_freq
         
     @staticmethod
@@ -95,7 +99,7 @@ class SubWordTokenizer():
         unique_ngrams = unique_ngrams[inds]
 
         # Generate word level encoder (using '<...>' words!)
-        self.encoder = self.special_tokens
+        self.encoder = dict(self.special_tokens)  # copy
         self.encoder.update({word: (i + len(self.special_tokens))
                              for i, word in enumerate(unique_whole_words)})
         
@@ -109,31 +113,34 @@ class SubWordTokenizer():
             {i: (idx + len_so_far) for idx, i in enumerate(unique_ngrams)})
 
         # Decoder
-        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.decoder = {v: k if k in self.special_tokens else k[1:-1]
+                        for k, v in self.encoder.items()}
 
     def encode(self, word):
         # Generate n-grams and add them to the word
-        angular_word = '<' + word + '>'
-        seq = [angular_word]
-        if len(word) > 1:
-            seq += self._generate_ngram(angular_word, self.ngram_len)
-        # seq = lst + ['[PAD]'] * (self.max_len_ngram - len(lst))
-        
+        if word not in self.special_tokens:
+            angular_word = '<' + word + '>'
+            seq = [angular_word]
+            if len(word) > 1:
+                seq += self._generate_ngram(angular_word, self.ngram_len)
+        else:
+            seq = [word]
+            
         # Encode the word and the ngram
         indices = []
         for word_or_ngram in seq:  # first in the list is the word itself
             try:
                 indices.append(self.encoder[word_or_ngram])
-            except:
+            except:  # this will still take the ngrams for an unknown word
                 indices.append(self.encoder['[UNK]'])
 
         return indices
     
     def decode(self, token_id_or_ids):
         if type(token_id_or_ids) == list:
-            return self.decoder[token_id_or_ids[0]][1:-1]
+            return self.decoder[token_id_or_ids[0]]
         elif type(token_id_or_ids) == int:
-            return self.decoder(token_id_or_ids)
+            return self.decoder[token_id_or_ids]
         else:
             raise TypeError('Invalid token format: %s' % type(token_id_or_ids))
 
