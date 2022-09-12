@@ -4,7 +4,7 @@
   model_version = 0  # might be useful for test-retest reliability analyses
   ngram_len = 3  # 0 for word encoding, > 0 for subword encoding
   debug_mode = true
-  load_model = true
+  load_model = false
   load_tokenizer = true
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false

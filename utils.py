@@ -69,16 +69,44 @@ def load_checkpoint(model_name, model_version, load_model, **kwargs):
             os.makedirs(model_dir)
             ckpt_path = None
     else:
-        try:
-            shutil.rmtree(path=model_dir)
-            print(f'Reseting folder {model_dir} and starting from scratch')
-        except FileNotFoundError:
-            print(f'Creating folder {model_dir} and starting from scratch')
-        os.makedirs(model_dir)
+        directory_not_empty = True
+        while directory_not_empty:
+            if os.path.exists(os.path.join(model_dir, 'checkpoints')):
+                print(f'Data found at {model_dir}. Increasing version number')
+                model_dir = model_dir.replace(f'version_{model_version}',
+                                              f'version_{model_version + 1}')
+                model_version += 1
+            else:
+                print(f'Creating folder {model_dir} and starting from scratch')
+                break
+        os.makedirs(model_dir, exist_ok=True)
         ckpt_path = None
-    return ckpt_path
+    return ckpt_path, model_version
 
 
+def update_and_save_config(config_path, run_params, model_name, new_model_version):
+    # Find config paths
+    old_config_path = config_path
+    new_logdir = os.path.join('logs', model_name, f'version_{new_model_version}')
+    new_config_path = os.path.join(new_logdir, 'config.toml')
+    
+    # Find model versions and update run parameters in case of later use
+    old_model_version = run_params['model_version']
+    run_params['model_version'] = new_model_version
+    
+    # Set version string to replace in the new config file
+    to_replace = f'model_version = {old_model_version}'
+    replace_by = f'model_version = {new_model_version}'
+    
+    # Write config file for this run
+    with open(new_config_path, 'w') as new_config_file:
+        with open(old_config_path, 'r') as old_config_file:
+            for line in old_config_file:
+                if to_replace in line:
+                    line = line.replace(to_replace, replace_by)
+                new_config_file.write(line)
+                
+            
 def set_environment(num_workers):
     """ Update environment if needed and check how many gpu can be used 
 

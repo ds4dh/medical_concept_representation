@@ -152,13 +152,15 @@ class PytorchLightningWrapper(pl.LightningModule):
 
 
 def main():
-    # Load checkpoint path if needed (and set to None if not found)
-    ckpt_path = utils.load_checkpoint(model_name, **run_params)
+    # Load checkpoint path if needed (set to None if no checkpoint)
+    ckpt_path, new_model_version = utils.load_checkpoint(model_name,
+                                                         **run_params)
     
-    # Save config file to the log directory of the model
-    version_str = str(run_params['model_version'])
-    logdir = os.path.join('logs', model_name, f'version_{version_str}')
-    shutil.copy(args.config_path, logdir)
+    # Update params if model_version changed and save config file to model logs
+    utils.update_and_save_config(args.config_path,
+                                 run_params,
+                                 model_name,
+                                 new_model_version)
     
     # Load pytorch lightning model-data wrapper
     model_data_wrapper = PytorchLightningWrapper()
@@ -178,7 +180,7 @@ def main():
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir='logs/',
                                           name=model_name,
-                                          version=run_params['model_version'])
+                                          version=new_model_version)
     
     # Set a trainer to train the model
     trainer = pl.Trainer(default_root_dir='logs',
