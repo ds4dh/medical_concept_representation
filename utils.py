@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 def load_model_and_params_from_config(config_path):
     ''' Load model, training and data parameters
-
+    
     Params:
     -------
         config_path (str): path to the config file (.toml)
@@ -29,8 +29,9 @@ def load_model_and_params_from_config(config_path):
     run_params = config['run']
     data_params = config['data']
     train_params = config['train']
+    ngram_str = 'ngram' + str(run_params['ngram_len'])
     model_used = run_params['model_used']
-    model_name = model_used + '_' + run_params['model_id']
+    model_name = '_'.join([model_used, ngram_str, run_params['model_id']])
     assert(model_used) in models.AVAILABLE_MODELS.keys(), f'Selected model \
         not available. Available models: {models.AVAILABLE_MODELS.keys()}'
     model = models.AVAILABLE_MODELS[model_used]
@@ -38,7 +39,7 @@ def load_model_and_params_from_config(config_path):
     return model, model_name, run_params, data_params, train_params, model_params
 
 
-def load_checkpoint(model_name, load_model):
+def load_checkpoint(model_name, model_version, load_model, **kwargs):
     """ Try to load a model checkpoint from the log directory
         Note: if checkpoint is not found, returns None and start from scratch
         Note: if a load_model == False, the logs of this model will be erased
@@ -48,23 +49,32 @@ def load_checkpoint(model_name, load_model):
         model_name (str): name that identifies the model uniquely
         load_model (bool): whether the model uses a checkpoint
             or the model is trained from scratch
+        version (int): number used to save different runs of a model
         
     Returns:
         str: path to model checkpoint if existing, else None
     """
-    model_dir = os.path.join('logs', model_name)
+    model_dir = os.path.join('logs', model_name, f'version_{model_version}')
     if load_model:
         try:
-            ckpt_dir = os.path.join(model_dir, 'version_0/checkpoints')
+            ckpt_dir = os.path.join(model_dir, 'checkpoints')
             ckpt_name = [p for p in os.listdir(ckpt_dir) if 'ckpt' in p][-1]
             ckpt_path = os.path.join(ckpt_dir, ckpt_name)
-        except (IndexError, FileNotFoundError):
-            print('No checkpoint found in logs/, starting from scratch')
+            print(f'Checkpoint found at {model_dir} and loaded')
+        except IndexError:
+            print(f'No checkpoint found at {model_dir}, starting from scratch')
+            ckpt_path = None
+        except FileNotFoundError:
+            print(f'Model folder {model_dir} not found, starting from scratch')
+            os.makedirs(model_dir)
             ckpt_path = None
     else:
-        print('Reseting logs/ and starting from scratch')
-        shutil.rmtree(path=model_dir, ignore_errors=True)
-        os.makedirs('logs', exist_ok=True)
+        try:
+            shutil.rmtree(path=model_dir)
+            print(f'Reseting folder {model_dir} and starting from scratch')
+        except FileNotFoundError:
+            print(f'Creating folder {model_dir} and starting from scratch')
+        os.makedirs(model_dir)
         ckpt_path = None
     return ckpt_path
 

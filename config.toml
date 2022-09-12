@@ -1,10 +1,10 @@
-# TODO: SAVE CONFIG FILE IN THE LOGS
 [run]
-  model_used = 'fasttext'  # 'fasttext', 'glove', 'elmo', 'bert'
+  model_used = 'bert'  # 'fasttext', 'glove', 'elmo', 'bert'
   model_id = 'test'
+  model_version = 0  # might be useful for test-retest reliability analyses
   ngram_len = 3  # 0 for word encoding, > 0 for subword encoding
-  debug_mode = false
-  load_model = false
+  debug_mode = true
+  load_model = true
   load_tokenizer = true
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false

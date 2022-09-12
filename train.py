@@ -1,4 +1,6 @@
+import os
 import argparse
+import shutil
 import utils
 import data
 import pytorch_lightning as pl
@@ -150,11 +152,16 @@ class PytorchLightningWrapper(pl.LightningModule):
 
 
 def main():
+    # Load checkpoint path if needed (and set to None if not found)
+    ckpt_path = utils.load_checkpoint(model_name, **run_params)
+    
+    # Save config file to the log directory of the model
+    version_str = str(run_params['model_version'])
+    logdir = os.path.join('logs', model_name, f'version_{version_str}')
+    shutil.copy(args.config_path, logdir)
+    
     # Load pytorch lightning model-data wrapper
     model_data_wrapper = PytorchLightningWrapper()
-    
-    # Load checkpoint path if needed (and set to None if not found)
-    ckpt_path = utils.load_checkpoint(model_name, run_params['load_model'])
 
     # Set environment
     accelerator, devices = utils.set_environment(run_params['num_workers'])
@@ -171,8 +178,8 @@ def main():
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir='logs/',
                                           name=model_name,
-                                          version=0)
-
+                                          version=run_params['model_version'])
+    
     # Set a trainer to train the model
     trainer = pl.Trainer(default_root_dir='logs',
                          accelerator=accelerator,
