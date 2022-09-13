@@ -23,7 +23,7 @@ class FastText(nn.Module):
         """
         y = self.embed(center)  # (batch_size [, n_subwords + 1], d_embed)
         if len(y.shape) > 2:
-            y = torch.mean(y, dim=-2)  # average over [word + subwords] dimension
+            y = torch.sum(y, dim=-2)  # sum over [word + subwords] dim
         return self.fc(y)  # (batch_size, vocab_size)
 
     def get_embeddings(self):

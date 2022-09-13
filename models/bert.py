@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
+
 class BERT(nn.Module):
     """ BERT: Bidirectional Encoder Representations from Transformers. """
     def __init__(self, vocab_size, special_tokens, max_seq_len, d_embed, d_ff,
@@ -38,7 +39,7 @@ class BERT(nn.Module):
         # Final projection to predict words for each masked token
         self.final_proj = nn.Linear(d_embed, vocab_size)  # just to try
 
-    def forward(self, masked, segment_labels=None):
+    def forward(self, masked, segment_labels=None, get_embeddings_only=False):
         # Adapt the size of what is used to build the masks
         input_for_masks = masked
         if len(input_for_masks.shape) > 2:  # ngram case
@@ -56,11 +57,13 @@ class BERT(nn.Module):
         # Run through all transformer blocks
         for transformer in self.transformer_blocks:
             x = transformer.forward(x, pad_mask)
-
-        # Record embedding and return a vocabulary-sized vector for each token
-        voc_projection = self.final_proj(x)
-        return voc_projection
-
+        
+        # Returns embeddings or word projections
+        if get_embeddings_only:
+            return x
+        else:
+            return self.final_proj(x)
+        
 
 class BertLoss(nn.Module):
     def __init__(self, mask_id):
@@ -218,7 +221,7 @@ class BERTEmbedding(nn.Module):
         token_embeddings = self.tok(sequence)
         if len(token_embeddings.shape) > 3:
             # (batch, seq, ngram, d_embed) -> (batch, seq_len, d_embed)
-            token_embeddings = token_embeddings.mean(dim=-2)
+            token_embeddings = token_embeddings.sum(dim=-2)
         
         # Add the other embeddings
         x = token_embeddings + self.pos(sequence) + self.seg(segment_labels)
