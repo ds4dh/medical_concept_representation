@@ -1,35 +1,31 @@
-import os
 import argparse
-import shutil
 import utils
 import data
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
-warnings.filterwarnings('ignore', category=pl.utilities.warnings.PossibleUserWarning)
+warnings.filterwarnings('ignore', category=PossibleUserWarning)
 
 
 parser = argparse.ArgumentParser(description='Train and test model.')
 parser.add_argument('--config_path', '-c', type=str, default='./config.toml')
 args = parser.parse_args()
-model, model_name, run_params, data_params, train_params, model_params = \
+model, run_params, data_params, train_params, model_params = \
     utils.load_model_and_params_from_config(args.config_path)
 
 
 class PytorchLightningWrapper(pl.LightningModule):
     def __init__(self):
         ''' Initialize a pytorch-lightning wrapper to train any model '''
-        super().__init__()       
+        super().__init__()
         # Load data pipeline
-        self.pipeline = data.DataPipeline(data_params['data_dir'],
-                                          data_params['data_subdir'],
-                                          data_params['max_seq_len'],
-                                          run_params['debug_mode'],
-                                          run_params['ngram_len'],
-                                          train_params['max_tokens_per_batch'],
-                                          model_params['special_tokens'])
+        self.pipeline = data.DataPipeline(data_params,
+                                          run_params,
+                                          train_params,
+                                          model_params)
         
         # Update model parameters and load model
         model_params['vocab_size'] = len(self.pipeline.tokenizer.encoder)
@@ -43,26 +39,13 @@ class PytorchLightningWrapper(pl.LightningModule):
         
     def step(self, batch, mode):
         ''' Proceed forward pass of the mode ('train' or 'val'), compute loss
-            Note: the loss function used to compute the loss is model-specific
-                
-        Params:
-        -------
-        batch: dict
-            Dictionary with the batch data
-        mode: str
-            Whether the step is a 'train' or 'val' step
-
-        Returns:
-        --------
-        dict: dictionary containing the loss (could contain more stuff)
-        
+            Note: the loss function used to compute the loss is model-specific       
         '''
-        # import pdb; pdb.set_trace()
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         outputs = self.model(**inputs)
         loss = self.model.loss_fn(outputs, **labels)
-        self.log('%s_loss' % mode, loss.cpu().detach())
+        self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=outputs.size(0))
         return {'loss': loss}  #, 'output': output.cpu().detach()}
 
     def training_step(self, batch, batch_idx):
@@ -77,48 +60,18 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, 'val')
         
     def validation_epoch_end(self, outputs):
-        ''' Log metrics from the output of the last validation step
-        
-        Params:
-        -------
-        outputs: list
-            List of dicts containing the outputs of the last validation step
-        
-        '''
+        ''' Log metrics from the output of the last validation step '''
         pass  # TODO: see if we implement anything here
     
     def test_step(self, batch, batch_idx):
-        ''' Perform a testing step with the trained model
-        
-        Params:
-        -------
-        batch: dict
-            Dictionary with the batch data of the testing dataset
-        batch_idx: int
-            Index of the batch
-                    
-        '''
+        ''' Perform a testing step with the trained model '''
         pass  # TODO: implemement the pca visualization as in glove code
 
     # def test_epoch_end(output):
     #     model.export_as_gensim(output)
 
     def get_dataloaders(self, split, shuffle):
-        ''' Generic function to initialize and return a dataloader
-                
-        Params:
-        -------
-        split: str
-            Split of the dataset to return. Can be 'train', 'val', or 'test'
-        shuffle: bool
-            Whether to shuffle the data or not (typically for training)
-
-        Returns:
-        --------
-        DataLoader
-            Dataloader for the specified data type
-        
-        '''
+        ''' Generic function to initialize and return a dataloader '''
         pl = self.pipeline.get_pipeline(model_params['task'], split, shuffle)
         return DataLoader(dataset=pl,
                           batch_size=None,  # batch_size is set by pipeline
@@ -152,14 +105,17 @@ class PytorchLightningWrapper(pl.LightningModule):
 
 
 def main():
+    ''' Wrap a pytorch-ligthning module around a model and the corresponding
+        data, and train the model to perform a model-specific task
+    '''
     # Load checkpoint path if needed (set to None if no checkpoint)
-    ckpt_path, new_model_version = utils.load_checkpoint(model_name,
-                                                         **run_params)
+    ckpt_path, new_model_version = utils.load_checkpoint(
+        model_params['model_name'], **run_params)
     
     # Update params if model_version changed and save config file to model logs
     utils.update_and_save_config(args.config_path,
                                  run_params,
-                                 model_name,
+                                 model_params['model_name'],
                                  new_model_version)
     
     # Load pytorch lightning model-data wrapper
@@ -179,7 +135,7 @@ def main():
     
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir='logs/',
-                                          name=model_name,
+                                          name=model_params['model_name'],
                                           version=new_model_version)
     
     # Set a trainer to train the model

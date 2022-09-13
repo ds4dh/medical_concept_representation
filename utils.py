@@ -1,5 +1,5 @@
 import os
-import shutil
+import json
 import toml
 import warnings
 import models
@@ -8,7 +8,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 
 
 def load_model_and_params_from_config(config_path):
-    ''' Load model, training and data parameters
+    ''' Load model, training and data parameters, using a config file
     
     Params:
     -------
@@ -17,69 +17,124 @@ def load_model_and_params_from_config(config_path):
     Returns:
     --------
         model (nn.Module child): the model that is used for this run
-        model_name (str): a unique identifier for the model
+        model_name (str): unique identifier for the model
         run_params (dict): general parameters about the simulation
         data_params (dict): parameters about where the data is, etc.
         train_params (dict): learning, optimizers, etc.
         model_params (dict): parameters of the model that is being trained
     
     '''
+    # Load configuration parameters
     assert '.toml' in config_path, 'Config path should have .toml extension.'
-    config = toml.load(config_path)   
+    config = toml.load(config_path)
     run_params = config['run']
     data_params = config['data']
     train_params = config['train']
+    
+    # Set model name to have a unique logs directory
     ngram_str = 'ngram' + str(run_params['ngram_len'])
     model_used = run_params['model_used']
     model_name = '_'.join([model_used, ngram_str, run_params['model_id']])
-    assert(model_used) in models.AVAILABLE_MODELS.keys(), f'Selected model \
-        not available. Available models: {models.AVAILABLE_MODELS.keys()}'
+    
+    # Retrieve corresponding model code
+    assert(model_used) in models.AVAILABLE_MODELS.keys(), 'Selected model ' +\
+        f'not available. Select from: {list(models.AVAILABLE_MODELS.keys())}.'
     model = models.AVAILABLE_MODELS[model_used]
     model_params = config['models'][model_used]
-    return model, model_name, run_params, data_params, train_params, model_params
+    model_params['model_name'] = model_name
+    
+    # Update bert classifier parameters if used
+    if model_used == 'bert_classifier':
+        update_reagent_info(data_params, model_params)
+        update_bert_parameters(config, model_name, model_params)
+    
+    return model, run_params, data_params, train_params, model_params
+
+
+def update_reagent_info(data_params, model_params):
+    """ Update data and bert classifier parameters with reagent information
+    """
+    data_dir = os.path.join(data_params['data_dir'], data_params['data_subdir'])
+    with open(os.path.join(data_dir, 'reagent_popularity.json'), 'r') as f:
+        
+        # Reach reagent information
+        dicts = [json.loads(line) for line in f.readlines()]
+        model_params['pos_weights'] = [d['weight'] for d in dicts]
+        
+        # Case where only k most popular reagents are classified
+        if model_params['n_classes'] != 0:
+            model_params['pos_weights'] = \
+                model_params['pos_weights'][:model_params['n_classes']]
+                
+        # Case where all reagents are classified
+        else:
+            model_params['n_classes'] = len(dicts)
+
+
+def update_bert_parameters(config, model_name, model_params):
+    """ Update parameters of bert classifier with parameters of bert    
+    """
+    # Try to find the corresponding BERT model ckpt for the BERT classifier
+    try:
+        version = 'version_%s' % config['run']['model_version']
+        bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+        bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
+        model_params['bert_ckpt_path'] = bert_ckpt_path
+    except FileNotFoundError:
+        print('No checkpoint found to initialize BERT model. Note: BERT and \
+               BERT classifier ids, versions and ngram-lengths must match.')
+    
+    # Update BERT classifier hyper-parameters with BERT hyper-parameters
+    for k, v in config['models']['bert'].items():
+        if k not in model_params.keys():
+            model_params[k] = v
 
 
 def load_checkpoint(model_name, model_version, load_model, **kwargs):
-    """ Try to load a model checkpoint from the log directory
-        Note: if checkpoint is not found, returns None and start from scratch
-        
-    Args:
-        model_name (str): name that identifies the model uniquely
-        load_model (bool): whether the model uses a checkpoint
-            or the model is trained from scratch
-        version (int): number used to save different runs of a model
-        
-    Returns:
-        str: path to model checkpoint if existing, else None
+    """ Try to find a checkpoint path for the model from the log directory.
+        If no checkpoint is found, None is returned (start from scratch).
     """
     model_dir = os.path.join('logs', model_name, f'version_{model_version}')
     if load_model:
-        try:
-            ckpt_dir = os.path.join(model_dir, 'checkpoints')
-            ckpt_name = [p for p in os.listdir(ckpt_dir) if 'ckpt' in p][-1]
-            ckpt_path = os.path.join(ckpt_dir, ckpt_name)
-            print(f'Checkpoint found at {model_dir} and loaded')
-        except IndexError:
-            print(f'No checkpoint found at {model_dir}, starting from scratch')
-            ckpt_path = None
-        except FileNotFoundError:
-            print(f'Model folder {model_dir} not found, starting from scratch')
-            os.makedirs(model_dir)
-            ckpt_path = None
+        ckpt_path = find_existing_checkpoint(model_dir)
     else:
-        directory_not_empty = True
-        while directory_not_empty:
-            if os.path.exists(os.path.join(model_dir, 'checkpoints')):
-                print(f'Data found at {model_dir}. Increasing version number')
-                model_dir = model_dir.replace(f'version_{model_version}',
-                                              f'version_{model_version + 1}')
-                model_version += 1
-            else:
-                print(f'Creating folder {model_dir} and starting from scratch')
-                break
-        os.makedirs(model_dir, exist_ok=True)
         ckpt_path = None
+        model_version = initialize_new_checkpoint_dir(model_dir, model_version)
     return ckpt_path, model_version
+
+
+def find_existing_checkpoint(model_dir):
+    """ Try to find checkpoint and initialize a new directory if not found
+    """
+    try:
+        ckpt_dir = os.path.join(model_dir, 'checkpoints')
+        ckpt_name = [p for p in os.listdir(ckpt_dir) if 'ckpt' in p][-1]
+        print(f'Checkpoint found at {model_dir} and loaded')
+        return os.path.join(ckpt_dir, ckpt_name)
+    except IndexError:
+        print(f'No checkpoint found at {model_dir}, starting from scratch.')
+        return None
+    except FileNotFoundError:
+        print(f'Model folder {model_dir} not found, starting from scratch.')
+        os.makedirs(model_dir, exist_ok=True)
+        return None
+    
+
+def initialize_new_checkpoint_dir(model_dir, model_version):
+    """ Try to initialize a new checkpoint directory but avoid overwriting
+    """
+    directory_not_empty = True
+    while directory_not_empty:
+        if os.path.exists(os.path.join(model_dir, 'checkpoints')):
+            print(f'Data found at {model_dir}. Increasing version number.')
+            model_dir = model_dir.replace(f'version_{model_version}',
+                                          f'version_{model_version + 1}')
+            model_version += 1
+        else:
+            print(f'Creating folder {model_dir} and starting from scratch.')
+            break
+    os.makedirs(model_dir, exist_ok=True)
+    return model_version
 
 
 def update_and_save_config(config_path, run_params, model_name, new_model_version):
@@ -92,7 +147,7 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
         model_name (str): exact name of the model being run
         new_model_version (int): model version that might have been changed to
             avoid erasing an existing model checkpoint
-        
+            
     """
     # Find config paths
     old_config_path = config_path
@@ -118,15 +173,6 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
             
 def set_environment(num_workers):
     """ Update environment if needed and check how many gpu can be used 
-
-    Params:
-    -------
-        num_workers (int): how many cpu-workers are used in the run
-
-    Returns:
-    --------
-        n_gpus_to_use (int): how many gpus can be used
-
     """
     if num_workers > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
