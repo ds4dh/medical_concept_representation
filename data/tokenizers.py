@@ -55,21 +55,35 @@ class SubWordTokenizer():
     """
     Subword-level tokenizer.
     """
-    def __init__(self, ngram_len, special_tokens, min_freq=0):
+
+    def __init__(self,
+                 ngram_min_len,
+                 ngram_max_len,
+                 special_tokens,
+                 min_freq=0,
+                 forbidden_ngram=["<", ">"]):
+
         self.encoder = None
-        self.ngram_len = ngram_len
+        assert ngram_min_len <= ngram_max_len
+        assert ngram_min_len >= 0
+        assert ngram_max_len >= 0
+        self.ngram_len = list(range(ngram_min_len, ngram_max_len + 1))
         self.special_tokens = special_tokens
         self.min_freq = min_freq
-        
+        self.forbidden_ngram = forbidden_ngram
+
     @staticmethod
     # TODO: see what type of ngram we want (Dimitris had an idea)
-    def _generate_ngram(text, ngram_len):
-        return [''.join(i) for i in ngrams(text, ngram_len)]
-    
+    def _generate_ngram(text, length, forbidden_ngram):
+        return [ngram for ngram in ["".join(i) for i in ngrams(text, length)] if (ngram not in forbidden_ngram) and (text[1:-1] not in ngram)]
+
     @staticmethod
     def _flatten(t):
         return [item for sublist in t for item in sublist]
-    
+
+    def _generate_ngrams(self, text):
+        return self._flatten([self._generate_ngram(text, i, self.forbidden_ngram) for i in self.ngram_len])
+
     def fit(self, words):
         print('Training tokenizer')
         assert isinstance(words, list)
@@ -86,47 +100,42 @@ class SubWordTokenizer():
         unique_whole_words = ['<' + i + '>' for i in unique_words]
 
         # Compute ngram vocabulary
-        unique_ngrams = [self._generate_ngram(word, self.ngram_len)
-                         for word in unique_whole_words]
-        unique_ngrams = self._flatten(unique_ngrams)
-        unique_ngrams = [ngram for ngram in unique_ngrams
-                         if not (ngram[0] == '<' and ngram[-1] == '>')]
+        unique_ngrams = self._flatten(
+            [self._generate_ngrams(word) for word in unique_whole_words])
 
         # Sort ngram vocabulary
-        unique_ngrams, ngram_counts = np.unique(unique_ngrams,
-                                                return_counts=True)
+        unique_ngrams, ngram_counts = np.unique(
+            unique_ngrams, return_counts=True)
         inds = ngram_counts.argsort()[::-1]
         unique_ngrams = unique_ngrams[inds]
 
         # Generate word level encoder (using '<...>' words!)
         self.encoder = dict(self.special_tokens)  # copy
         self.encoder.update({word: (i + len(self.special_tokens))
-                             for i, word in enumerate(unique_whole_words)})
-        
+                            for i, word in enumerate(unique_whole_words)})
+
         # Store word count for every word (useful for skipgram dataset)
-        self.word_counts = {self.encoder[word]: count for word, count in \
-                            zip(unique_whole_words, sorted(word_counts)[::-1])}
+        self.word_counts = {self.encoder[word]: count for word, count in zip(
+            unique_whole_words, sorted(word_counts)[::-1])}
 
         # Update encoder with ngram level vocabulary
         len_so_far = len(self.encoder)
-        self.encoder.update(
-            {i: (idx + len_so_far) for idx, i in enumerate(unique_ngrams)})
+        self.encoder.update({i: (idx + len_so_far)
+                            for idx, i in enumerate(unique_ngrams)})
 
         # Decoder
-        self.decoder = {v: k if k in self.special_tokens else k[1:-1]
-                        for k, v in self.encoder.items()}
+        self.decoder = {
+            v: k if k in self.special_tokens else k[1:-1] for k, v in self.encoder.items()}
 
     def encode(self, word):
         # Generate n-grams and add them to the word
         if word not in self.special_tokens:
             angular_word = '<' + word + '>'
-            seq = [angular_word]
-            if len(word) > 1:
-                seq += self._generate_ngram(angular_word, self.ngram_len)
+            seq = [angular_word] + self._generate_ngrams(angular_word)
         else:
             seq = [word]
-            
-        # Encode the word and the ngram
+
+        # Encode the word and the ngram.
         indices = []
         for word_or_ngram in seq:  # first in the list is the word itself
             try:
@@ -135,7 +144,7 @@ class SubWordTokenizer():
                 indices.append(self.encoder['[UNK]'])
 
         return indices
-    
+
     def decode(self, token_id_or_ids):
         if type(token_id_or_ids) == list:
             return self.decoder[token_id_or_ids[0]]
