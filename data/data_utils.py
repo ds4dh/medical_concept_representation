@@ -53,13 +53,20 @@ class JsonReader(IterDataPipe):
             You should write this function, which depends on your data.
             The output should be a list of token words (or other)
         """
-        # product = sample['src'].split('.')[-1]
-        # reactants = sample['src'].replace(product, '')[:-1]
-        # reagents = sample['tgt']
-        # reaction = ' > '.join([reactants, reagents, product])
-        # return reaction.replace('  ', ' ').split(' ')
-        return sample
-        
+        # return sample
+        return self.parse_chemical_reaction(sample)
+    
+    @staticmethod
+    def parse_chemical_reaction(sample):
+        """ Parse a dict of src (reactant(s) and product) and tgt (reagent(s))
+            strings into a list of tokens representing the smiles reaction
+        """
+        product = sample['src'].split('.')[-1]
+        reactants = sample['src'].replace(product, '')[:-1]
+        reagents = sample['tgt']
+        reaction = ' > '.join([reactants, reagents, product])
+        return reaction.replace('  ', ' ').split(' ')        
+
 
 class Encoder(IterDataPipe):
     """ Encode lists of words to lists of tokens or ngrams with a tokenizer """

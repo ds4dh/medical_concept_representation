@@ -1,20 +1,18 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier'
   model_used = 'bert'
-  model_id = 'test'
+  model_id = 'reagent_prediction'
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_len = 0  # 0 for word encoding, > 0 for subword encoding
-  debug = true
-  load_model = false  # careful: changing ngram_len will change embedding layer
+  debug = false
+  load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
-  # data_dir = './data/datasets/reagent_pred'
-  # data_subdir = 'smiles/all'
-  data_dir = '/mnt/d/DL/datasets/autophe/json'  # './data/datasets/autophe'
-  data_subdir = 'time_not_categorized'
+  data_dir = './data/datasets/reagent_pred'  # /autophe, /reagent_pred
+  data_subdir = 'smiles'  # time_not_categorized, smiles
   log_dir = './logs'
   max_seq_len = 512
 
@@ -49,10 +47,10 @@
     task = 'mlm'
     input_keys = ['masked']
     label_keys = ['masked', 'target']
-    n_layers = 4
-    d_embed = 256
-    d_ff = 2048
-    n_heads = 8
+    n_layers = 6  # 4
+    d_embed = 384  # 256
+    d_ff = 3072  # 2048
+    n_heads = 12  # 8
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0
