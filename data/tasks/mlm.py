@@ -8,6 +8,7 @@ from torchdata.datapipes.iter import IterDataPipe
 class DynamicMasker(IterDataPipe):
     """ Take samples and replace a given proportion of token_ids by mask_id """
     def __init__(self, dp, tokenizer):
+        super().__init__()
         self.dp = dp
         self.mask_id = tokenizer.encode('[MASK]')
         self.bos_id = tokenizer.encode('[CLS]')
@@ -55,6 +56,7 @@ class DynamicMasker(IterDataPipe):
     
 class ReagentPredMaker(IterDataPipe):
     def __init__(self, dp, data_dir, n_classes):
+        super().__init__()
         self.dp = dp
         self.reagent_map = self.get_reagent_info(data_dir, n_classes)
 

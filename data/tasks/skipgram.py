@@ -11,6 +11,7 @@ class SkipGramMaker(IterDataPipe):
         them to memory, then get ready to yield the computed sample pairs
     """
     def __init__(self, dp, tokenizer, data_dir, split, load_data=False):
+        super().__init__()
         save_or_load_path = os.path.join(data_dir, f'skipgram_{split}')
         if load_data:
             self.dp = load_dp(save_or_load_path)

@@ -11,6 +11,7 @@ class CoocMaker(IterDataPipe):
         memory as a flat array, then get ready to yield the computed samples
     """
     def __init__(self, dp, tokenizer, data_dir, split, load_data=False):
+        super().__init__()
         save_or_load_path = os.path.join(data_dir, f'cooc_{split}')
         if load_data:
             self.dp = load_dp(save_or_load_path)
@@ -50,7 +51,7 @@ class CoocMaker(IterDataPipe):
         return cooc
 
     @staticmethod
-    def filter_cooc(cooc_, min_cooc=1):
+    def filter_cooc(cooc_, min_cooc=10):
         """ Filters out token co-occurences that are below a threshold """
         assert min_cooc > 0, 'Tokens must co-occur at least once because \
                               GloVe is a log-regression model.'
