@@ -7,8 +7,6 @@ from torchdata.datapipes.iter import Batcher, Shuffler
 
 class DataPipeline():
     """ General pipeline for a dataset of word / code sequences """
-    # def __init__(self, data_dir, data_subdir, max_seq_len, debug, ngram_len,
-    #              max_tokens_per_batch, special_tokens, n_classes=None):
     def __init__(self, data_params, run_params, train_params, model_params):
         # Data parameters
         self.data_dir = data_params['data_dir']
@@ -20,7 +18,8 @@ class DataPipeline():
             self.n_classes = model_params['n_classes']
         
         # Load tokenizer and train it
-        self.ngram_len = run_params['ngram_len']
+        self.ngram_min_len = run_params['ngram_min_len']
+        self.ngram_max_len = run_params['ngram_max_len']
         self.max_tokens = train_params['max_tokens_per_batch']
         self.special_tokens = model_params['special_tokens']
         self.tokenizer = self.get_tokenizer()
@@ -43,7 +42,7 @@ class DataPipeline():
         dp = data.Encoder(dp, self.tokenizer)
         dp = tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
         if shuffle: dp = Shuffler(dp)
-        if self.ngram_len > 0:
+        if self.ngram_max_len > 0:
             dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
         else:
             dp = Batcher(dp, batch_size=self.max_tokens//2)  # center, context
@@ -70,7 +69,7 @@ class DataPipeline():
         dp = data.Encoder(dp, self.tokenizer)
         dp = tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
         if shuffle: dp = Shuffler(dp)
-        if self.ngram_len > 0:
+        if self.ngram_max_len > 0:
             dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
         else:
             dp = Batcher(dp, batch_size=self.max_tokens//3)  # left, right, cooc
@@ -146,13 +145,14 @@ class DataPipeline():
     def get_tokenizer(self):
         """ Function that loads and train a tokenizer with / without ngrams """
         # Load the tokenizer
-        if self.ngram_len == 0:
+        if self.ngram_max_len == 0:
             tokenizer = data.Tokenizer(self.special_tokens)
-        elif self.ngram_len > 0:
-            tokenizer = data.SubWordTokenizer(self.ngram_len,
+        elif self.ngram_min_len <= self.ngram_max_len:
+            tokenizer = data.SubWordTokenizer(self.ngram_min_len,
+                                              self.ngram_max_len,
                                               self.special_tokens)
         else:
-            raise Exception('Invalid ngram length given to the pipeline.')
+            raise Exception('Invalid ngram lengths given to the pipeline.')
         
         # Train the tokenizer with the training data (validation if debug mode)
         tokenizer_training_batches = []

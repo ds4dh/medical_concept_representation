@@ -33,6 +33,8 @@ class JsonReader(IterDataPipe):
         This pipeline should generate lists of words to send to the encoder
     """
     def __init__(self, data_dir, split):
+        super().__init__()
+        self.data_dir = data_dir
         dp = FileLister(data_dir)
         dp = Filter(dp, partial(self.filter_fn, split=split))
         dp = FileOpener(dp)
@@ -40,21 +42,24 @@ class JsonReader(IterDataPipe):
         self.dp = dp
     
     def __iter__(self):
-        for _, stream in self.dp:
-            yield self.parse_fn(json.loads(stream))
-    
-    @staticmethod
-    def filter_fn(filename, split):
-        """ Return whether a string filename contains the given split """
-        return split in filename
+        try:
+            for _, stream in self.dp:
+                yield self.parse_fn(json.loads(stream))
+        except TypeError:
+            raise FileNotFoundError('Data not found at %s' % self.data_dir)
 
     def parse_fn(self, sample):
         """ This function defines how the data is parsed from the json file
             You should write this function, which depends on your data.
             The output should be a list of token words (or other)
         """
-        # return sample
-        return self.parse_chemical_reaction(sample)
+        return sample
+        # return self.parse_chemical_reaction(sample)
+    
+    @staticmethod
+    def filter_fn(filename, split):
+        """ Return whether a string filename contains the given split """
+        return split in filename
     
     @staticmethod
     def parse_chemical_reaction(sample):
@@ -71,6 +76,7 @@ class JsonReader(IterDataPipe):
 class Encoder(IterDataPipe):
     """ Encode lists of words to lists of tokens or ngrams with a tokenizer """
     def __init__(self, dp, tokenizer):
+        super().__init__()
         self.dp = dp
         self.tokenizer = tokenizer
         
@@ -107,7 +113,7 @@ class DynamicBatcher(IterDataPipe):
         
     """
     def __init__(self, dp, max_tokens, max_len, drop_last=True):
-        # Pipeline parameters
+        super().__init__()
         self.max_tokens = max_tokens
         self.max_len = max_len
         self.drop_last = drop_last
@@ -116,8 +122,6 @@ class DynamicBatcher(IterDataPipe):
                          'bucket_num': 8,
                          'use_in_batch_shuffle': False,
                          'sort_key': self.sort_fn}
-
-        # Pre-processing (samples ordered by length before dynamic batching)
         dp = BucketBatcher(dp, **bucket_params)
         dp = UnBatcher(dp)
         self.dp = dp
@@ -126,9 +130,7 @@ class DynamicBatcher(IterDataPipe):
         batch = []
         sample_len_max = 0
         n_tokens_in_padded_batch = 0
-        for sample in tqdm(self.dp,
-                           desc='Pre-computing batch sizes for this epoch',
-                           leave=False):
+        for sample in tqdm(self.dp, desc='Computing batch sizes', leave=False):
             
             # Trim the sample in case it is longer than self.max_len
             if isinstance(sample, dict):
@@ -199,6 +201,7 @@ class DictUnzipper(IterDataPipe):
            -> {'src': [id_1, id_2, ...], 'tgt': [id_a, id_b, ...]}
     """
     def __init__(self, dp):
+        super().__init__()
         self.dp = dp
         self.data_keys = None
     
@@ -220,6 +223,7 @@ class TorchPadder(IterDataPipe):
             which case each sequence is padded to the length of the longest.
     """
     def __init__(self, dp, tokenizer):
+        super().__init__()
         self.dp = dp
         self.pad_id = tokenizer.encode('[PAD]')
         self.pad_int = self.pad_id

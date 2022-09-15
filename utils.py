@@ -31,8 +31,13 @@ def load_model_and_params_from_config(config_path):
     data_params = config['data']
     train_params = config['train']
     
-    # Set model name to have a unique logs directory
-    ngram_str = 'ngram' + str(run_params['ngram_len'])
+    # Check ngram length and set unique model name for logs directory
+    assert run_params['ngram_min_len'] <= run_params['ngram_max_len'] and \
+           run_params['ngram_min_len'] >= 0 and \
+           run_params['ngram_max_len'] >= 0, \
+        'Invalid ngram min and max length (max < min or any < 0).'
+    ngram_str = 'ngram-min%s-max%s' % (run_params['ngram_min_len'],
+                                       run_params['ngram_max_len'])
     model_used = run_params['model_used']
     model_name = '_'.join([model_used, ngram_str, run_params['model_id']])
     
