@@ -5,40 +5,44 @@ from torch import relu, sigmoid
 
 class ELMO(nn.Module):
     def __init__(self, char_vocab_size, word_vocab_size, cnn_params,
-                 d_embed_char, d_embed_word, n_lstm_layers, dropout):
+                 d_embed_char, d_embed_word, n_lstm_layers, dropout=0.5):
         super().__init__()
-        self.word_embedding = nn.Embedding(word_vocab_size, d_embed_word)
+        # self.word_embedding = nn.Embedding(word_vocab_size, d_embed_word)
         self.char_embedding = nn.Embedding(char_vocab_size, d_embed_char)
         self.char_cnn = CharCNN(cnn_params, d_embed_char, d_embed_word)
-        self.word_lstm = WordLSTM(n_lstm_layers, d_embed_word)
+        self.word_lstm = WordLSTM(n_lstm_layers, d_embed_word, dropout)
         self.dropout = nn.Dropout(p=dropout)
-        self.softmax = nn.Softmax(dim=-1)
+        self.loss_fn = ELMOLoss()
         
     def forward(self, chars, words=None):
         """ Forward pass of the ELMO model
-            - Input chars have shape (batch_size, seq_len, word_len_max)
+            - Input chars have shape (batch_size, seq_len, word_max_len)
             - Input words have shape (batch_size, seq_len)
             - Output has shape (batch_size, ???) -> need to see with the task
         """
-        if words != None:
-            whole_word_emb = self.word_embedding(words)  # (batch_size, seq_len, d_embed_word)
-            pass  # what to do here?
-        char_emb = self.char_embedding(chars)  # (batch_size, seq_len, word_len_max, d_embed_char)
-        static_emb = self.char_cnn(char_emb) # (batch_size, seq_len, d_cnn)
-        context_emb = self.word_lstm(static_emb)  # (batch_size, seq_len, d_embed_word) -> could return more?
-        return self.softmax(self.dropout(context_emb))  # could return the static + all context embeddings?
+        # if words != None:
+        #     whole_word_emb = self.word_embedding(words)  # (B, L, d_embed_word)
+        #     pass  # what to do here?
+        char_emb = self.char_embedding(chars)  # (B, L, word_max_len, d_embed_char)
+        static_emb = self.char_cnn(char_emb)  # (B, L, d_embed_word)
+        context_emb = self.word_lstm(static_emb)  # (B, L, d_embed_word)
+        return self.dropout(context_emb)
 
     def get_embeddings(self, chars, words=None):
+        """ This should return the static + all context embeddings
+        """
         pass  # not implemented yet
         
 
 class ELMOLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        pass  # not implemented yet
-    
-    def forward(self, input_, target):
-        pass  # not implemented yet but may be similar to transformer loss
+        self.log_softmax = nn.LogSoftmax(dim=-1)
+        self.nlll_loss = nn.NLLLoss()
+
+    def forward(self, model_output, target):
+        logits = self.log_softmax(model_output)
+        return self.nlll_loss(logits, target)
     
 
 class CharCNN(nn.Module):
@@ -52,20 +56,20 @@ class CharCNN(nn.Module):
             for (d_conv, kernel_size) in conv_params])
         d_conv_sum = sum([p[0] for p in conv_params])
         self.activ_fn = activ_fn
-        self.highway = Highway(d_conv_sum, num_layers=2)
+        self.highway = Highway(d_conv_sum, n_layers=2)
         self.final_proj = nn.Linear(d_conv_sum, d_embed_word)
     
     def forward(self, x):
         """ Forward pass of the character-cnn module
             - Input has shape (batch_size, seq_len, d_embed_char)
-            - Output has shape (batch_size, seq_len, d_embed)
+            - Output has shape (batch_size, seq_len, d_embed_word)
         """
         cnn_out_list = []
         for layer in self.cnn_layers:
-            cnn_out = self.activ_fn(layer(x).max(dim=-2))  # (batch_size, seq_len, d_conv[i])
+            cnn_out = self.activ_fn(layer(x).max(dim=-2))  # (B, L, d_conv[i])
             cnn_out_list.append(cnn_out)
-        concat = torch.cat(cnn_out_list, dim=-1)  # (batch_size, seq_len, sum([d_conv]))
-        return self.final_proj(self.highway(concat))  # (batch_size, seq_len, d_embed)
+        concat = torch.cat(cnn_out_list, dim=-1)  # (B, L, sum([d_conv]))
+        return self.final_proj(self.highway(concat))  # (B, L, d_embed_word)
 
 
 class Highway(nn.Module):
@@ -93,12 +97,13 @@ class Highway(nn.Module):
 
 
 class WordLSTM(nn.Module):
-    def __init__(self, d_embed_word, d_hidden, n_lstm_layers=2):
+    def __init__(self, d_embed_word, d_hidden, n_lstm_layers=2, dropout=0.5):
         super().__init__()
         self.lstm_layers = nn.ModuleList([
             nn.LSTM(input_size=d_embed_word,
                     hidden_size=d_hidden,
                     bidirectional=True,
+                    dropout=dropout,
                     proj_size=d_embed_word)
             for _ in range(n_lstm_layers)])
         
@@ -108,7 +113,7 @@ class WordLSTM(nn.Module):
             - Output has shape (batch_size, seq_len, d_embed_word)
         """
         for i, layer in enumerate(self.lstm_layers):
-            out = layer(x)  # h and c default to zero at init if not provided
+            out, (h, c) = layer(x)  # h and c default to zero at init if not provided
             if i < len(self.lstm_layers) - 1:
                 x = out + x  # residual connection (?)
             else:

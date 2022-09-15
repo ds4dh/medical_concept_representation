@@ -18,6 +18,7 @@ class BERT(nn.Module):
         :param dropout: dropout rate
         """
         super().__init__()
+        assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
         self.pad_id = special_tokens['[PAD]']
         self.mask_id = special_tokens['[MASK]']
         self.d_embed = d_embed
@@ -29,7 +30,8 @@ class BERT(nn.Module):
         # Sum of positional, segment and token embeddings
         self.embedding = BERTEmbedding(vocab_size=vocab_size,
                                        max_len=max_seq_len,
-                                       d_embed=d_embed)
+                                       d_embed=d_embed,
+                                       pad_id=self.pad_id)
 
         # Multi-layers transformer blocks, deep network
         self.transformer_blocks = nn.ModuleList(
@@ -187,8 +189,8 @@ class LayerNorm(nn.Module):
     """ Construct a layernorm module (See citation for details). """
     def __init__(self, features, eps=1e-6):
         super(LayerNorm, self).__init__()
-        self.a_2 = nn.Parameter(torch.ones(features))
-        self.b_2 = nn.Parameter(torch.zeros(features))
+        self.a_2 = nn.parameter.Parameter(torch.ones(features))
+        self.b_2 = nn.parameter.Parameter(torch.zeros(features))
         self.eps = eps
 
     def forward(self, x):
@@ -207,9 +209,11 @@ class BERTEmbedding(nn.Module):
     :param d_embed: embedding size of token embedding
     :param dropout: dropout rate
     """
-    def __init__(self, vocab_size, max_len, d_embed, dropout=0.1):
+    def __init__(self, vocab_size, pad_id, max_len, d_embed, dropout=0.1):
         super().__init__()
-        self.tok = TokenEmbedding(vocab_size=vocab_size, d_embed=d_embed)
+        self.tok = TokenEmbedding(vocab_size=vocab_size,
+                                  d_embed=d_embed,
+                                  pad_id=pad_id)
         self.pos = PositionalEmbedding(d_embed=self.tok.embedding_dim,
                                        max_len=max_len)
         self.seg = SegmentEmbedding(d_embed=self.tok.embedding_dim)
@@ -221,16 +225,24 @@ class BERTEmbedding(nn.Module):
         token_embeddings = self.tok(sequence)
         if len(token_embeddings.shape) > 3:
             # (batch, seq, ngram, d_embed) -> (batch, seq_len, d_embed)
-            token_embeddings = token_embeddings.sum(dim=-2)
+            token_embeddings = self.combine_ngram_embeddings(token_embeddings,
+                                                             dim=-2)
         
         # Add the other embeddings
         x = token_embeddings + self.pos(sequence) + self.seg(segment_labels)
         return self.dropout(x)
 
-
+    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+        if reduce == 'mean':
+            norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
+            return x.mean(dim=dim) / norm_factor
+        else:
+            return x.sum(dim=dim)
+        
+        
 class TokenEmbedding(nn.Embedding):
-    def __init__(self, vocab_size, d_embed=512):
-        super().__init__(vocab_size, d_embed, padding_idx=0)
+    def __init__(self, vocab_size, d_embed=512, pad_id=0):
+        super().__init__(vocab_size, d_embed, padding_idx=pad_id)
 
 
 class PositionalEmbedding(nn.Module):

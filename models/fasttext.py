@@ -1,10 +1,11 @@
-import torch
 import torch.nn as nn
 
 
 class FastText(nn.Module): 
-    def __init__(self, vocab_size, d_embed, *args, **kwargs):
+    def __init__(self, vocab_size, d_embed, special_tokens, *args, **kwargs):
         super().__init__()
+        assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
+        self.pad_id = special_tokens['[PAD]']
         self.embed = nn.Embedding(vocab_size, d_embed)
         self.fc = nn.Linear(d_embed, vocab_size)
         self.loss_fn = FastTextLoss()
@@ -22,9 +23,16 @@ class FastText(nn.Module):
             
         """
         y = self.embed(center)  # (batch_size [, n_subwords + 1], d_embed)
-        if len(y.shape) > 2:
-            y = torch.sum(y, dim=-2)  # sum over [word + subwords] dim
+        if len(y.shape) > 2:  # sum over [word + subwords] dim
+            y = self.combine_ngram_embeddings(y, dim=-2)
         return self.fc(y)  # (batch_size, vocab_size)
+
+    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+        if reduce == 'mean':
+            norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
+            return x.mean(dim=dim) / norm_factor
+        else:
+            return x.sum(dim=dim)
 
     def get_embeddings(self):
         ...
