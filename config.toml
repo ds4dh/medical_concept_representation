@@ -1,7 +1,7 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier'
-  model_used = 'bert'
-  model_id = 'test'
+  model_used = 'bert_classifier'
+  model_id = 'reagent_prediction'
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_min_len = 0  # 0 for word encoding, > 0 for subword encoding
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
