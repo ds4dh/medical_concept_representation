@@ -52,7 +52,6 @@ def load_model_and_params_from_config(config_path):
     if model_used == 'bert_classifier':
         update_reagent_info(data_params, model_params)
         update_bert_parameters(config, model_name, model_params)
-    
     return model, run_params, data_params, train_params, model_params
 
 
@@ -83,11 +82,13 @@ def update_bert_parameters(config, model_name, model_params):
     try:
         version = 'version_%s' % config['run']['model_version']
         bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+        bert_dir = bert_dir.replace('bert_classifier', 'bert')
         bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
         model_params['bert_ckpt_path'] = bert_ckpt_path
     except FileNotFoundError:
-        print('No checkpoint found to initialize BERT model. Note: BERT and \
-               BERT classifier ids, versions and ngram-lengths must match.')
+        raise FileNotFoundError('No checkpoint found to initialize BERT ' + \
+            'model at %s. Note: BERT and BERT classifier ids, ' % bert_dir + \
+            'versions and ngram-lengths must match.')
     
     # Update BERT classifier hyper-parameters with BERT hyper-parameters
     for k, v in config['models']['bert'].items():

@@ -8,7 +8,7 @@ class BERTClassifier(nn.Module):
     """ BERTClassifier: Finetune BERT and classifier weights. """
     def __init__(self, vocab_size, special_tokens, max_seq_len, d_embed, d_ff,
                  n_layers, n_heads, n_classes, bert_ckpt_path, pos_weights,
-                 dropout=0.1, *args, **kwargs):
+                 dropout=0.1, grad_only_for_norm_layers=True, *args, **kwargs):
         """
         :param voc_size: vocabulary size of words given to the model
         :param pad_id: index of the padding token
@@ -22,7 +22,8 @@ class BERTClassifier(nn.Module):
         self.bert = BERT(vocab_size, special_tokens, max_seq_len, d_embed,
                          d_ff, n_layers, n_heads, dropout)
         self.load_bert_weights(bert_ckpt_path)
-        self.enable_grad_only_for_norm_layers()
+        if grad_only_for_norm_layers:
+            self.enable_grad_only_for_norm_layers()
         self.classifier = nn.Linear(d_embed, n_classes)
         self.loss_fn = BertClassifierLoss(n_classes, pos_weights)
         
@@ -33,12 +34,15 @@ class BERTClassifier(nn.Module):
     
     def load_bert_weights(self, bert_ckpt_path):
         """ Load pre-trained weights for BERT """
-        state_dict = torch.load(bert_ckpt_path)['state_dict']       
-        state_dict = {key.replace('model.bert.', ''): parameters
+        state_dict = torch.load(bert_ckpt_path)['state_dict']
+        state_dict = {key.replace('model.', ''): parameters
                       for key, parameters in state_dict.items()}
-        state_dict = {key: value for key, value in state_dict.items()
-                      if 'model' not in key}
-        self.bert.load_state_dict(state_dict)
+        try:
+            self.bert.load_state_dict(state_dict)
+        except RuntimeError as error:
+            print('Tip: maybe the dataset is not the same as what BERT was',
+                  'trained on (is debug mode enabled?)')
+            raise error
         print('Pre-trained weights of BERT loaded from %s' % bert_ckpt_path)
         
     def enable_grad_only_for_norm_layers(self):
@@ -54,6 +58,9 @@ class BERTClassifier(nn.Module):
         for name, param in self.bert.named_parameters():
             if 'norm' in name:
                 param.requires_grad = True
+    
+    def validation_metric(self, prediction, target):
+        pass
                 
 
 class BertClassifierLoss(nn.Module):

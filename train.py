@@ -35,7 +35,6 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Some useful parameters for the run
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
-        self.learning_rate = train_params['lr']
         
     def step(self, batch, mode):
         ''' Proceed forward pass of the mode ('train' or 'val'), compute loss
@@ -93,8 +92,10 @@ class PytorchLightningWrapper(pl.LightningModule):
     def configure_optimizers(self):
         ''' Return the optimizer and the scheduler '''
         optim_params = {'params': self.parameters(),
-                        'lr': self.learning_rate,
+                        'lr': train_params['lr'],
                         'betas': train_params['adam_betas']}
+                        # 'lambda': train_params['lambda']}
+        # optim = torch.optim.AdamW(**optim_params)
         optim = torch.optim.Adam(**optim_params)
         sched_params = {'optimizer': optim,
                         'd_embed': model_params['d_embed'],

@@ -91,7 +91,7 @@ class Highway(nn.Module):
         for p, g in zip(self.gate, self.proj):
             proj = self.proj_fn(p(x))
             gate = self.gate_fn(g(x))
-            x = gate * proj + (1.0 - gate) * x
+            x = proj * gate + x * (1.0 - gate)
 
         return x
 
