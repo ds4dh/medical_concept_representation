@@ -1,7 +1,8 @@
 [run]
-  # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier'
-  model_used = 'bert_classifier'
-  model_id = 'reagent_prediction'
+  # Possible models: 'fasttext', 'glove', 'elmo',
+  #                  'bert', 'bert_classifier', 'transformer'
+  model_used = 'fasttext'
+  model_id = 'test'
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_min_len = 0  # 0 for word encoding, > 0 for subword encoding
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
@@ -12,16 +13,16 @@
   pin_memory = false
 
 [data]
-  data_dir = '/mnt/d/DL/datasets/autophe/json'  #'./data/datasets/autophe'  # /autophe, /reagent_pred
+  data_dir = './data/datasets/json'  # /json, /reagent_pred
   data_subdir = 'time_not_categorized'  # time_not_categorized, smiles
   log_dir = './logs'
   max_seq_len = 512
 
 [train]
-  lr = 0.2 #  2.0
+  lr = 2.0
   adam_betas = [0.9, 0.998]  # momentum
   adam_lambda = 0.01  # weight decay
-  accumulate_grad_batches = 4
+  accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
   n_steps = 500000
   n_warmup_steps = 10000
@@ -61,15 +62,33 @@
       '[CLS]' = 2
       '[SEP]' = 3
       '[END]' = 4
-      
+  
+  [models.transformer]
+    task = 'reagent_pred_mt'  # 'reagent_pred_mt' (could add 'mt' here)
+    input_keys = ['src', 'tgt']  # 'tgt' present for teacher forcing
+    label_keys = ['tgt']
+    share_embeddings = true
+    n_enc_layers = 4
+    n_dec_layers = 4
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
+    dropout = 0.1
+    [models.transformer.special_tokens]
+      '[PAD]' = 0
+      '[UNK]' = 1
+      '[CLS]' = 2
+      '[SEP]' = 3
+      '[END]' = 4
+
   [models.bert]
-    task = 'mlm'
+    task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
     label_keys = ['masked', 'target']
-    n_layers = 4  # 6
-    d_embed = 256  # 384
-    d_ff = 2048  # 3072
-    n_heads = 8  # 12
+    n_layers = 4
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0
@@ -79,10 +98,8 @@
       '[END]' = 4
       '[MASK]' = 5
 
-  # I added this for my chemistry project, but this might as well be used to
-  # train a classifier on top of any model's pre-trained embeddings
   [models.bert_classifier]  # uses [model.bert] hyper-parameters
-    task = 'reagent_pred'
+    task = 'reagent_pred_cls'
     input_keys = ['sample']
     label_keys = ['reagent_label']
     n_classes = 0  # 0: all reagents, > 0: most popular reagents

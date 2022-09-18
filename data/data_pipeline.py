@@ -2,11 +2,13 @@ import os
 import data
 import data.tasks as tasks
 from tqdm import tqdm
-from torchdata.datapipes.iter import Batcher, Shuffler
+from torchdata.datapipes.iter import Shuffler
+from itertools import chain
 
 
 class DataPipeline():
-    """ General pipeline for a dataset of word / code sequences """
+    """ General pipeline for a dataset of word / code sequences
+    """
     def __init__(self, data_params, run_params, train_params, model_params):
         # Data parameters
         self.data_dir = data_params['data_dir']
@@ -22,128 +24,67 @@ class DataPipeline():
         self.ngram_max_len = run_params['ngram_max_len']
         self.max_tokens = train_params['max_tokens_per_batch']
         self.special_tokens = model_params['special_tokens']
-        self.tokenizer = self.get_tokenizer()
+        self.tokenizer = self.get_tokenizer(model_params['task'])
     
-    def skipgram_pipeline(self, split, shuffle=False):
-        """ Pipeline for skipgram task (center to context token prediction).
-        
-            1) Read the correct file and yield lines
-            2) Encode each sample word / code using the specified tokenizer
-            3) Compute and yield center-context pairs from the downsampled file
-            4) Shuffle sample order if wanted
-            5) Batch samples
-                - for ngram-tokenization, dynamic batch size and padded samples
-                - for normal tokenization, fixed batch size is fixed
-            6) Shuffle batch order if wanted
-            7) Build and yield torch.tensor from each batch
-            
-        """
-        dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.Encoder(dp, self.tokenizer)
-        dp = tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
-        if shuffle: dp = Shuffler(dp)
-        if self.ngram_max_len > 0:
-            dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
-        else:
-            dp = Batcher(dp, batch_size=self.max_tokens//2)  # center, context
-        dp = data.DictUnzipper(dp)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.TorchPadder(dp, self.tokenizer)
-        return dp
-    
-    def cooc_pipeline(self, split, shuffle=False):
-        """ Pipeline for glove task (token co-occurrence prediction).
-        
-            1) Read the correct file and yield lines
-            2) Encode each sample word / code using the specified tokenizer
-            3) Compute and format co-occurrence matrix from the file
-            4) Shuffle sample order if wanted
-            5) Batch samples
-                - for ngram-tokenization, dynamic batch size and padded samples
-                - for normal tokenization, batch size is fixed
-            6) Shuffle batch order if wanted
-            7) Build and yield torch.tensor from each batch
-            
-        """
-        dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.Encoder(dp, self.tokenizer)
-        dp = tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
-        if shuffle: dp = Shuffler(dp)
-        if self.ngram_max_len > 0:
-            dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
-        else:
-            dp = Batcher(dp, batch_size=self.max_tokens//3)  # left, right, cooc
-        dp = data.DictUnzipper(dp)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.TorchPadder(dp, self.tokenizer)
-        return dp
-
-    def mlm_pipeline(self, split, shuffle=False):
-        """ Pipeline for mlm task (information retrieval task, using masking).
-        
-            1) Read the correct file and yield lines
-            2) Encode each sample word / code using the specified tokenizer
-            3) Mask a given proportion of input tokens, replace them by mask_id
-            4) Shuffle sample order if wanted
-            5) Batch samples dynamically (always needed)
-            6) Shuffle batch order if wanted
-            7) Build and yield torch.tensor from each batch
-            
-        """
-        dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.Encoder(dp, self.tokenizer)
-        dp = tasks.DynamicMasker(dp, self.tokenizer)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
-        dp = data.DictUnzipper(dp)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.TorchPadder(dp, self.tokenizer)
-        return dp
-        
-    def reagent_pred_pipeline(self, split, shuffle=False):
-        """ Pipeline for mlm task (information retrieval task, using masking).
-        
-            1) Read the correct file and yield lines
-            2) Encode each sample word / code using the specified tokenizer
-            3) Mask a given proportion of input tokens, replace them by mask_id
-            4) Shuffle sample order if wanted
-            5) Batch samples dynamically (always needed)
-            6) Shuffle batch order if wanted
-            7) Build and yield torch.tensor from each batch
-            
-        """
-        dp = data.JsonReader(self.data_fulldir, split)
-        dp = tasks.ReagentPredMaker(dp, self.data_fulldir, self.n_classes)
-        dp = data.Encoder(dp, self.tokenizer)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
-        dp = data.DictUnzipper(dp)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.TorchPadder(dp, self.tokenizer)
-        return dp
-        
     def get_pipeline(self, task, split, shuffle=False):
-        """ Function that selects the wanted pipeline for the correct split """
+        """ General pipeline common to all models. Specificities include how
+            data is parsed after being read in the json file and how the task
+            is built for the model, once the data is encoded by the tokenizer
+        """
         # Print information about which pipeline and dataset is used
         print(f'Building {split} pipeline for {task} task.')
         if self.debug and split == 'train':
             print(' - Using validation data for training in debug mode.')
             split = 'val'
-            
-        # Send the correct pipeline
-        if task == 'skipgram':
-            return self.skipgram_pipeline(split, shuffle)
-        elif task == 'cooc':
-            return self.cooc_pipeline(split, shuffle)
-        elif task == 'mlm':
-            return self.mlm_pipeline(split, shuffle)
-        elif task == 'reagent_pred':
-            return self.reagent_pred_pipeline(split, shuffle)
-        else:
-            raise Exception('Invalid task given to the pipeline.')
         
-    def get_tokenizer(self):
-        """ Function that loads and train a tokenizer with / without ngrams """
+        # Build task-specific pipeline        
+        dp = data.JsonReader(self.data_fulldir, split)
+        dp = self.select_parse_pipeline(dp, task)
+        dp = data.Encoder(dp, self.tokenizer)
+        dp = self.select_task_pipeline(dp, task, split)
+        if shuffle: dp = Shuffler(dp)
+        dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
+        dp = data.DictUnzipper(dp)
+        if shuffle: dp = Shuffler(dp)
+        dp = data.TorchPadder(dp, self.tokenizer)
+        return dp
+    
+    def select_parse_pipeline(self, dp, task):
+        """ Set how data is parsed for the model after being read
+        """
+        if task in ['skipgram', 'cooc', 'mlm']:
+            return dp
+        elif task == 'reagent_pred_mt':
+            return tasks.ReagentPredParser(dp, task)
+        elif task == 'reagent_pred_mlm':
+            return tasks.ReagentPredParser(dp, task)
+        elif task == 'reagent_pred_cls':
+            return tasks.ReagentPredParser(dp,
+                                           task=task,
+                                           data_dir=self.data_fulldir,
+                                           n_classes=self.n_classes)
+        else:
+            raise Exception('Invalid task given to the pipeline %s' % task)
+        
+    def select_task_pipeline(self, dp, task, split):
+        """ Set the pipeline specific to the task of the model
+        """
+        if task == 'skipgram':
+            return tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
+        elif task == 'cooc':
+            return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
+        elif task == 'reagent_pred_mt':
+            return tasks.EosBosAdder(dp, self.tokenizer)
+        elif task in ['mlm', 'reagent_pred_mlm']:
+            return tasks.DynamicMasker(dp, self.tokenizer)
+        elif task == 'reagent_pred_cls':
+            return dp
+        else:
+            raise Exception('Invalid task given to the pipeline %s' % task)
+        
+    def get_tokenizer(self, task):
+        """ Load and train a tokenizer with / without ngrams
+        """
         # Load the tokenizer
         if self.ngram_max_len == 0:
             tokenizer = data.Tokenizer(self.special_tokens)
@@ -153,12 +94,17 @@ class DataPipeline():
                                               self.special_tokens)
         else:
             raise Exception('Invalid ngram lengths given to the pipeline.')
+
+        # Build a pipeline for the tokenizer, given the task of the model
+        split = 'val' if self.debug else 'train'
+        dp = data.JsonReader(self.data_fulldir, split)
+        dp = self.select_parse_pipeline(dp, task)  # task-specific part
         
         # Train the tokenizer with the training data (validation if debug mode)
         tokenizer_training_batches = []
-        split = 'val' if self.debug else 'train'
-        for sample in tqdm(data.JsonReader(self.data_fulldir, split),
-                          desc='Building data to train tokenizer'):
+        for sample in tqdm(dp, desc='Building data to train tokenizer'):
+            if isinstance(sample, dict):
+                sample = list(chain(*list(sample.values())))
             tokenizer_training_batches.extend(sample)
         tokenizer.fit(tokenizer_training_batches)
 

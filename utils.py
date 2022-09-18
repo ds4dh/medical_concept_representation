@@ -50,13 +50,15 @@ def load_model_and_params_from_config(config_path):
     
     # Update bert classifier parameters if used
     if model_used == 'bert_classifier':
-        update_reagent_info(data_params, model_params)
+        update_class_info(data_params, model_params)
         update_bert_parameters(config, model_name, model_params)
     return model, run_params, data_params, train_params, model_params
 
 
-def update_reagent_info(data_params, model_params):
-    """ Update data and bert classifier parameters with reagent information
+def update_class_info(data_params, model_params):
+    """ Update data and bert classifier parameters with class information
+        TODO: put all this (specific to task, e.g., here, reagent prediction)
+        TODO: in data/task/parsing (but hard because model loss_fn need update)
     """
     data_dir = os.path.join(data_params['data_dir'], data_params['data_subdir'])
     with open(os.path.join(data_dir, 'reagent_popularity.json'), 'r') as f:
@@ -79,10 +81,10 @@ def update_bert_parameters(config, model_name, model_params):
     """ Update parameters of bert classifier with parameters of bert    
     """
     # Try to find the corresponding BERT model ckpt for the BERT classifier
+    version = 'version_%s' % config['run']['model_version']
+    bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+    bert_dir = bert_dir.replace('bert_classifier', 'bert')
     try:
-        version = 'version_%s' % config['run']['model_version']
-        bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
-        bert_dir = bert_dir.replace('bert_classifier', 'bert')
         bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
         model_params['bert_ckpt_path'] = bert_ckpt_path
     except FileNotFoundError:

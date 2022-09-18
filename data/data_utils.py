@@ -10,6 +10,7 @@ from torchdata.datapipes.iter import (
     Filter,
     FileOpener,
     LineReader,
+    Batcher,
     UnBatcher,
     BucketBatcher,
 )
@@ -32,9 +33,10 @@ class JsonReader(IterDataPipe):
     """ Combined pipeline to list, select, open, read and parse a json file
         This pipeline should generate lists of words to send to the encoder
     """
-    def __init__(self, data_dir, split):
+    def __init__(self, data_dir, split, parse_id=None):
         super().__init__()
         self.data_dir = data_dir
+        self.parse_id = parse_id
         dp = FileLister(data_dir)
         dp = Filter(dp, partial(self.filter_fn, split=split))
         dp = FileOpener(dp)
@@ -42,19 +44,22 @@ class JsonReader(IterDataPipe):
         self.dp = dp
     
     def __iter__(self):
-        try:
-            for _, stream in self.dp:
-                yield self.parse_fn(json.loads(stream))
-        except TypeError:
-            raise FileNotFoundError('Data not found at %s' % self.data_dir)
+        for _, stream in self.dp:
+            yield self.parse_fn(json.loads(stream))
 
     def parse_fn(self, sample):
         """ This function defines how the data is parsed from the json file
-            You should write this function, which depends on your data.
-            The output should be a list of token words (or other)
+            - You should write this function, which depends on your data.
+            - The output should be a list of token words (or other)
+            - In this project, sample is {'src': str, 'tgt': str}, where each
+                string contains tokens separated by spaces
         """
-        return sample
-        # return self.parse_chemical_reaction(sample)
+        if self.parse_id == 'reagent_pred_mlm':
+            return self.reagent_pred_mlm_fn(sample)
+        elif self.parse_id == 'reagent_pred_mt':
+            return self.reagent_pred_mt_fn(sample)            
+        else:
+            return sample
     
     @staticmethod
     def filter_fn(filename, split):
@@ -62,7 +67,7 @@ class JsonReader(IterDataPipe):
         return split in filename
     
     @staticmethod
-    def parse_chemical_reaction(sample):
+    def reagent_pred_mlm_fn(sample):
         """ Parse a dict of src (reactant(s) and product) and tgt (reagent(s))
             strings into a list of tokens representing the smiles reaction
         """
@@ -70,7 +75,7 @@ class JsonReader(IterDataPipe):
         reactants = sample['src'].replace(product, '')[:-1]
         reagents = sample['tgt']
         reaction = ' > '.join([reactants, reagents, product])
-        return reaction.replace('  ', ' ').split(' ')        
+        return reaction.replace('  ', ' ').split(' ')
 
 
 class Encoder(IterDataPipe):

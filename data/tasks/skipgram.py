@@ -12,7 +12,7 @@ class SkipGramMaker(IterDataPipe):
     """
     def __init__(self, dp, tokenizer, data_dir, split, load_data=False):
         super().__init__()
-        save_or_load_path = os.path.join(data_dir, f'skipgram_{split}')
+        save_or_load_path = os.path.join(data_dir, f'skipgram_{split}')        
         if load_data:
             self.dp = load_dp(save_or_load_path)
         else:
@@ -34,7 +34,7 @@ class SkipGramMaker(IterDataPipe):
         """ Compute the subsample probability for each token id """
         word_counts = tokenizer.word_counts
         sum_of_all_word_counts = sum(word_counts.values())
-        subsample_probs = {}
+        subsample_probs = {v: 1.0 for v in tokenizer.special_tokens.values()}  # {}
         for token_id, word_occurence in word_counts.items():
             word_fraction = word_occurence / sum_of_all_word_counts
             keep_score = (thresh / word_fraction) ** 0.5
