@@ -21,10 +21,16 @@ class BERTClassifier(nn.Module):
         super().__init__()
         self.bert = BERT(vocab_size, special_tokens, max_seq_len, d_embed,
                          d_ff, n_layers, n_heads, dropout)
+        
         self.load_bert_weights(bert_ckpt_path)
         if grad_only_for_norm_layers:
             self.enable_grad_only_for_norm_layers()
-        self.classifier = nn.Linear(d_embed, n_classes)
+        
+        self.classifier = nn.Sequential(nn.Linear(d_embed, d_embed),
+                                        nn.Tanh(),
+                                        nn.Dropout(dropout),
+                                        nn.Linear(d_embed, vocab_size))
+
         self.loss_fn = BertClassifierLoss(n_classes, pos_weights)
         
     def forward(self, sample):
@@ -61,7 +67,7 @@ class BERTClassifier(nn.Module):
     
     def validation_metric(self, prediction, target):
         pass
-                
+    
 
 class BertClassifierLoss(nn.Module):
     def __init__(self, n_classes, pos_weights):

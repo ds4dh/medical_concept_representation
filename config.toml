@@ -44,6 +44,23 @@
     [models.glove.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
+  
+  [models.elmo]
+    task = 'lm'
+    input_keys = ['sequence']
+    label_keys = ['sequence']
+    d_convs = [512, 512, 512, 512]
+    k_sizes = [2, 3, 4, 5]  # should be ngram_len lists?
+    d_embed_char = 256
+    d_embed_word = 256
+    n_lstm_layers = 2
+    dropout = 0.5
+    [models.elmo.special_tokens]
+      '[PAD]' = 0
+      '[UNK]' = 1
+      '[CLS]' = 2
+      '[SEP]' = 3
+      '[END]' = 4
       
   [models.bert]
     task = 'mlm'
