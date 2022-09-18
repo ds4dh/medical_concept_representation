@@ -10,7 +10,6 @@ from torchdata.datapipes.iter import (
     Filter,
     FileOpener,
     LineReader,
-    Batcher,
     UnBatcher,
     BucketBatcher,
 )
@@ -31,7 +30,6 @@ def load_dp(load_path):
 
 class JsonReader(IterDataPipe):
     """ Combined pipeline to list, select, open, read and parse a json file
-        This pipeline should generate lists of words to send to the encoder
     """
     def __init__(self, data_dir, split, parse_id=None):
         super().__init__()
@@ -45,37 +43,12 @@ class JsonReader(IterDataPipe):
     
     def __iter__(self):
         for _, stream in self.dp:
-            yield self.parse_fn(json.loads(stream))
-
-    def parse_fn(self, sample):
-        """ This function defines how the data is parsed from the json file
-            - You should write this function, which depends on your data.
-            - The output should be a list of token words (or other)
-            - In this project, sample is {'src': str, 'tgt': str}, where each
-                string contains tokens separated by spaces
-        """
-        if self.parse_id == 'reagent_pred_mlm':
-            return self.reagent_pred_mlm_fn(sample)
-        elif self.parse_id == 'reagent_pred_mt':
-            return self.reagent_pred_mt_fn(sample)            
-        else:
-            return sample
+            yield json.loads(stream)
     
     @staticmethod
     def filter_fn(filename, split):
         """ Return whether a string filename contains the given split """
         return split in filename
-    
-    @staticmethod
-    def reagent_pred_mlm_fn(sample):
-        """ Parse a dict of src (reactant(s) and product) and tgt (reagent(s))
-            strings into a list of tokens representing the smiles reaction
-        """
-        product = sample['src'].split('.')[-1]
-        reactants = sample['src'].replace(product, '')[:-1]
-        reagents = sample['tgt']
-        reaction = ' > '.join([reactants, reagents, product])
-        return reaction.replace('  ', ' ').split(' ')
 
 
 class Encoder(IterDataPipe):

@@ -19,7 +19,8 @@ model, run_params, data_params, train_params, model_params = \
 
 class PytorchLightningWrapper(pl.LightningModule):
     def __init__(self):
-        ''' Initialize a pytorch-lightning wrapper to train any model '''
+        """ Initialize a pytorch-lightning wrapper to train any model
+        """
         super().__init__()
         # Load data pipeline
         self.pipeline = data.DataPipeline(data_params,
@@ -37,40 +38,55 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.label_keys = set(model_params['label_keys'])
         
     def step(self, batch, mode):
-        ''' Proceed forward pass of the mode ('train' or 'val'), compute loss
+        """ Proceed forward pass of the mode ('train' or 'val'), compute loss
             Note: the loss function used to compute the loss is model-specific       
-        '''
+        """
+        # Retrieve inputs and labels and run the model
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         outputs = self.model(**inputs)
+        
+        # Compute loss and other metrics
         loss = self.model.loss_fn(outputs, **labels)
-        self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=outputs.size(0))
-        return {'loss': loss}  #, 'output': output.cpu().detach()}
-
+        to_return = {'loss': loss}
+        if hasattr(self.model, '%s_metric' % mode):
+            to_return.update(self.model.val_metric(outputs, **labels))
+        
+        # Log loss and other metrics, and return them to the pl-module
+        btch_sz = outputs.size(0)
+        for k, v in to_return.items():
+            self.log('%s_%s' % (mode, k), v.cpu().detach(), batch_size=btch_sz)
+        return to_return
+    
     def training_step(self, batch, batch_idx):
-        """ Perform training step and return loss (see step) """
+        """ Perform training step and return loss (see step)
+        """
         return self.step(batch, 'train')
             
     def validation_step(self, batch, batch_idx):
         # USEFULENESS OF VALIDATION SET? GOOD TO AVOID FITTING HYPERPARAMETERS ON THE TEST SET
         # BUT APART FROM THAT, ONCE WE HAVE VALIDATED THE HYPERPARAMETERS, WE CAN USE VALIDATION + TRAINING AS TRAINING
         # OR AT LEAST WE NEED TO EMBED ALL THE CONCEPTS (SO NOT LOOSING SOME OF THEM JUST BECAUSE WE WANT VALIDATION)
-        """ Perform validation step and return loss (see step) """
+        """ Perform validation step and return loss (see step)
+        """
         return self.step(batch, 'val')
         
     def validation_epoch_end(self, outputs):
-        ''' Log metrics from the output of the last validation step '''
+        """ Log metrics from the output of the last validation step
+        """
         pass  # TODO: see if we implement anything here
     
-    def test_step(self, batch, batch_idx):
-        ''' Perform a testing step with the trained model '''
-        pass  # TODO: implemement the pca visualization as in glove code
+    # def test_step(self, batch, batch_idx):
+    #     """ Perform a testing step with the trained model
+    #     """
+    #     pass  # TODO: implemement the pca visualization as in glove code
 
     # def test_epoch_end(output):
     #     model.export_as_gensim(output)
 
     def get_dataloaders(self, split, shuffle):
-        ''' Generic function to initialize and return a dataloader '''
+        """ Generic function to initialize and return a dataloader
+        """
         pl = self.pipeline.get_pipeline(model_params['task'], split, shuffle)
         return DataLoader(dataset=pl,
                           batch_size=None,  # batch_size is set by pipeline
@@ -78,25 +94,31 @@ class PytorchLightningWrapper(pl.LightningModule):
                           pin_memory=run_params['pin_memory'])
 
     def train_dataloader(self):
-        ''' Return the training dataloader '''
+        """ Return the training dataloader
+        """
         return self.get_dataloaders('train', shuffle=True)
     
     def val_dataloader(self):
-        ''' Return the validation dataloader '''
+        """ Return the validation dataloader
+        """
         return self.get_dataloaders('val', shuffle=False)
 
     def test_dataloader(self):
-        ''' Return the testing dataloader '''
+        """ Return the testing dataloader
+        """
         return self.get_dataloaders('test', shuffle=False)
 
     def configure_optimizers(self):
-        ''' Return the optimizer and the scheduler '''
+        """ Return the optimizer and the scheduler
+        """
         optim_params = {'params': self.parameters(),
                         'lr': train_params['lr'],
                         'betas': train_params['adam_betas']}
-                        # 'lambda': train_params['lambda']}
-        # optim = torch.optim.AdamW(**optim_params)
-        optim = torch.optim.Adam(**optim_params)
+        if train_params['optimizer'] == 'adamw':
+            optim_params.update({'weight_decay': train_params['adam_lambda']})
+            optim = torch.optim.AdamW(**optim_params)
+        else:
+            optim = torch.optim.Adam(**optim_params)
         sched_params = {'optimizer': optim,
                         'd_embed': model_params['d_embed'],
                         'n_warmup_steps': train_params['n_warmup_steps']}
@@ -106,9 +128,9 @@ class PytorchLightningWrapper(pl.LightningModule):
 
 
 def main():
-    ''' Wrap a pytorch-ligthning module around a model and the corresponding
+    """ Wrap a pytorch-ligthning module around a model and the corresponding
         data, and train the model to perform a model-specific task
-    '''
+    """
     # Load checkpoint path if needed (set to None if no checkpoint)
     ckpt_path, new_model_version = utils.load_checkpoint(
         model_params['model_name'], **run_params)

@@ -75,22 +75,25 @@ def update_class_info(data_params, model_params):
         # Case where all reagents are classified
         else:
             model_params['n_classes'] = len(dicts)
-
+            
 
 def update_bert_parameters(config, model_name, model_params):
     """ Update parameters of bert classifier with parameters of bert    
     """
     # Try to find the corresponding BERT model ckpt for the BERT classifier
-    version = 'version_%s' % config['run']['model_version']
-    bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
-    bert_dir = bert_dir.replace('bert_classifier', 'bert')
-    try:
-        bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
-        model_params['bert_ckpt_path'] = bert_ckpt_path
-    except FileNotFoundError:
-        raise FileNotFoundError('No checkpoint found to initialize BERT ' + \
-            'model at %s. Note: BERT and BERT classifier ids, ' % bert_dir + \
-            'versions and ngram-lengths must match.')
+    if model_params['load_pretrained_bert']:
+        version = 'version_%s' % config['run']['model_version']
+        bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+        bert_dir = bert_dir.replace('bert_classifier', 'bert')
+        try:
+            bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
+            model_params['bert_ckpt_path'] = bert_ckpt_path
+        except FileNotFoundError:
+            raise FileNotFoundError('No checkpoint found to initialize BERT ' + \
+                'model at %s. Note: BERT and BERT classifier ids, ' % bert_dir + \
+                'versions and ngram-lengths must match.')
+    else:
+        model_params['bert_ckpt_path'] = None
     
     # Update BERT classifier hyper-parameters with BERT hyper-parameters
     for k, v in config['models']['bert'].items():

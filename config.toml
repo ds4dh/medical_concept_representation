@@ -8,7 +8,7 @@
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
   debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
-  load_tokenizer = true
+  load_tokenizer = true  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
@@ -20,8 +20,9 @@
 
 [train]
   lr = 2.0
+  optimizer = 'adam'  # adam, adamw
   adam_betas = [0.9, 0.998]  # momentum
-  adam_lambda = 0.01  # weight decay
+  adam_lambda = 0.01  # weight decay (only for adamw optimizer)
   accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
   n_steps = 500000
@@ -64,7 +65,7 @@
       '[END]' = 4
   
   [models.transformer]
-    task = 'reagent_pred_mt'  # 'reagent_pred_mt' (could add 'mt' here)
+    task = 'reagent_pred_mt'  # could add 'mt' here
     input_keys = ['src', 'tgt']  # 'tgt' present for teacher forcing
     label_keys = ['tgt']
     share_embeddings = true
@@ -84,7 +85,7 @@
   [models.bert]
     task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
-    label_keys = ['masked', 'target']
+    label_keys = ['masked', 'target']  # 'masked' present to get mask indices
     n_layers = 4
     d_embed = 256
     d_ff = 2048
@@ -98,9 +99,12 @@
       '[END]' = 4
       '[MASK]' = 5
 
-  [models.bert_classifier]  # uses [model.bert] hyper-parameters
-    task = 'reagent_pred_cls'
+  [models.bert_classifier]
+    # If load_pretrained_bert is true, the version number, model_id, ngram min
+    # and max length will be used to identify which weights of bert are loaded.
+    task = 'reagent_pred_cls'  # could add 'cls' here
     input_keys = ['sample']
-    label_keys = ['reagent_label']
+    label_keys = ['label']
     n_classes = 0  # 0: all reagents, > 0: most popular reagents
-    grad_only_for_norm_layers = true
+    load_pretrained_bert = false
+    bert_grad_type = 'norm'  # 'none', 'norm', 'all' (weights tuned in bert)
