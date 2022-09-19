@@ -78,18 +78,20 @@ class BERTClassifier(nn.Module):
         pred = (logits > threshold).float()
         gold = self.loss_fn.multi_label_one_hot(label)
         gold = gold.to(model_output.device).float()
+        correct = [p.tolist() == g.tolist() for p, g in zip(pred, gold)]
+        top1 = sum(correct) / len(correct)       # exact match proportion
         
-        TP = (pred * gold).mean()
-        TN = ((1 - pred) * (1 - gold)).mean()
-        FP = ((pred - gold) > 0).float().mean()
-        FN = ((gold - pred) > 0).float().mean()
+        TP = (pred * gold).mean()                # true positives
+        TN = ((1 - pred) * (1 - gold)).mean()    # true negatives
+        FP = ((pred - gold) > 0).float().mean()  # false positives
+        FN = ((gold - pred) > 0).float().mean()  # false negatives
         
-        acc = (TP + TN) / (FP + FN + TP + TN)
-        prec = TP / (FP + TP)
-        rec = TP / (FN + TP)
-        f1 = 2 * (prec * rec) / (prec + rec)
+        acc = (TP + TN) / (FP + FN + TP + TN)    # accuracy
+        prec = TP / (FP + TP)                    # precision
+        rec = TP / (FN + TP)                     # recall
+        f1 = 2 * (prec * rec) / (prec + rec)     # f1-score
         
-        return {'acc': acc, 'prec': prec, 'rec': rec, 'f1': f1}
+        return {'top1': top1, 'acc': acc, 'prec': prec, 'rec': rec, 'f1': f1}
     
 
 class BertClassifierLoss(nn.Module):
