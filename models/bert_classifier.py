@@ -68,7 +68,6 @@ class BERTClassifier(nn.Module):
         if bert_grad_type in ['norm']:
             for name, param in self.bert.named_parameters():
                 if 'norm' in name:
-                    print(param)
                     param.requires_grad = True
     
     def val_metric(self, model_output, label, threshold=0.5):

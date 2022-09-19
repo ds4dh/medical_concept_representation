@@ -1,26 +1,28 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo',
   #                  'bert', 'bert_classifier', 'transformer'
-  model_used = 'fasttext'
-  model_id = 'test'
+  model_used = 'bert_classifier'
+  model_id = 'reagent_prediction'
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_min_len = 0  # 0 for word encoding, > 0 for subword encoding
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
-  debug = true
+  debug = false
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
-  data_dir = './data/datasets/json'  # /json, /reagent_pred
-  data_subdir = 'time_not_categorized'  # time_not_categorized, smiles
+  # data_dir = './data/datasets/json'
+  # data_subdir = 'time_not_categorized'
+  data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
+  data_subdir = 'smiles'
   log_dir = './logs'
   max_seq_len = 512
 
 [train]
-  lr = 2.0
-  optimizer = 'adam'  # adam, adamw
+  lr = 0.02
+  optimizer = 'adamw'  # adam, adamw
   adam_betas = [0.9, 0.998]  # momentum
   adam_lambda = 0.01  # weight decay (only for adamw optimizer)
   accumulate_grad_batches = 1
@@ -83,13 +85,13 @@
       '[END]' = 4
 
   [models.bert]
-    task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
+    task = 'reagent_pred_mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
     label_keys = ['masked', 'target']  # 'masked' present to get mask indices
-    n_layers = 4
-    d_embed = 256
-    d_ff = 2048
-    n_heads = 8
+    n_layers = 6
+    d_embed = 384
+    d_ff = 3072
+    n_heads = 12
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0
@@ -102,9 +104,11 @@
   [models.bert_classifier]
     # If load_pretrained_bert is true, the version number, model_id, ngram min
     # and max length will be used to identify which weights of bert are loaded.
+    # Note: for fine-tuning, you might consider decreasing the learning rate
     task = 'reagent_pred_cls'  # could add 'cls' here
+    tokenizer_task = 'reagent_pred_mlm'   # to have the same vocabulary as bert
     input_keys = ['sample']
     label_keys = ['label']
     n_classes = 0  # 0: all reagents, > 0: most popular reagents
-    load_pretrained_bert = false
+    load_pretrained_bert = true
     bert_grad_type = 'norm'  # 'none', 'norm', 'all' (weights tuned in bert)

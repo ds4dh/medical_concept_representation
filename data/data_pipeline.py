@@ -24,7 +24,7 @@ class DataPipeline():
         self.ngram_max_len = run_params['ngram_max_len']
         self.max_tokens = train_params['max_tokens_per_batch']
         self.special_tokens = model_params['special_tokens']
-        self.tokenizer = self.get_tokenizer(model_params['task'])
+        self.tokenizer = self.get_tokenizer(model_params)
     
     def get_pipeline(self, task, split, shuffle=False):
         """ General pipeline common to all models. Specificities include how
@@ -82,7 +82,7 @@ class DataPipeline():
         else:
             raise Exception('Invalid task given to the pipeline %s' % task)
         
-    def get_tokenizer(self, task):
+    def get_tokenizer(self, model_params):
         """ Load and train a tokenizer with / without ngrams
         """
         # Load the tokenizer
@@ -94,16 +94,23 @@ class DataPipeline():
                                               self.special_tokens)
         else:
             raise Exception('Invalid ngram lengths given to the pipeline.')
+        
+        # Figure out which type of input the tokenizer should encode
+        if 'tokenizer_task' in model_params:
+            tokenizer_task = model_params['tokenizer_task']
+        else:
+            tokenizer_task = model_params['task']
 
         # Build a pipeline for the tokenizer, given the task of the model
         split = 'val' if self.debug else 'train'
         dp = data.JsonReader(self.data_fulldir, split)
-        dp = self.select_parse_pipeline(dp, task)  # task-specific part
+        dp = self.select_parse_pipeline(dp, tokenizer_task)
         
         # Train the tokenizer with the training data (validation if debug mode)
         tokenizer_training_batches = []
         for sample in tqdm(dp, desc='Building data to train tokenizer'):
-            if isinstance(sample, dict):
+            if isinstance(sample, dict):  # avoid taking label indices as tokens
+                sample = {k: v for k, v in sample.items() if 'label' not in k}
                 sample = list(chain(*list(sample.values())))
             tokenizer_training_batches.extend(sample)
         tokenizer.fit(tokenizer_training_batches)
