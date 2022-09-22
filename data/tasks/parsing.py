@@ -13,7 +13,9 @@ class ReagentPredParser(IterDataPipe):
         
     def __iter__(self):
         for sample in self.dp:
-            yield self.parse_fn(sample)
+            parsed_sample = self.parse_fn(sample)
+            if parsed_sample is not None:  # None designates a bad sample
+                yield parsed_sample
     
     def select_parse_fn(self, task):
         """ How data is parsed
@@ -54,10 +56,14 @@ class ReagentPredParser(IterDataPipe):
         sample = self.parse_reaction_for_reagent_pred_mlm(sample)
         splits = [list(g) for _, g in groupby(sample, key='>'.__ne__)][::2]
         sample = splits[0] + ['>', '>'] + splits[-1]  # reactants > > product        
-        reagents = ''.join(splits[1]).split('.')
-        reagent_labels = [self.reagent_map[r] for r in reagents]
-        return {'sample': sample, 'label': reagent_labels}
-    
+        reagents = list(set(''.join(splits[1]).split('.')))
+        reagent_labels = [self.reagent_map[r] for r in reagents
+                          if r in self.reagent_map.keys()]
+        if len(reagent_labels) > 0:
+            return {'sample': sample, 'label': reagent_labels}
+        else:
+            return None  # if no label of this sample is in the classes
+
     def get_reagent_map(self):
         """ Generate a map from any reagent to its corresponding label id
         """

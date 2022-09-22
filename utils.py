@@ -51,7 +51,7 @@ def load_model_and_params_from_config(config_path):
     # Update bert classifier parameters if used
     if model_used == 'bert_classifier':
         update_class_info(data_params, model_params)
-        update_bert_parameters(config, model_name, model_params)
+        update_bert_params(config, model_name, model_params)
     return model, run_params, data_params, train_params, model_params
 
 
@@ -77,26 +77,35 @@ def update_class_info(data_params, model_params):
             model_params['n_classes'] = len(dicts)
             
 
-def update_bert_parameters(config, model_name, model_params):
+def update_bert_params(config, model_name, model_params):
     """ Update parameters of bert classifier with parameters of bert    
     """
     # Try to find the corresponding BERT model ckpt for the BERT classifier
     if model_params['load_pretrained_bert']:
-        version = 'version_%s' % config['run']['model_version']
-        bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
-        bert_dir = bert_dir.replace('bert_classifier', 'bert')
+        bert_path = model_params['bert_path']
+        if bert_path not in ['', 'none']:
+            bert_dir = os.path.join(bert_path, 'checkpoints')
+            bert_config = toml.load(os.path.join(bert_path, 'config.toml'))
+            bert_params = bert_config['models']['bert']
+        else:
+            version = 'version_%s' % config['run']['model_version']
+            bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+            bert_dir = bert_dir.replace('bert_classifier', 'bert')
+            bert_params = config['models']['bert']
         try:
             bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
             model_params['bert_ckpt_path'] = bert_ckpt_path
         except FileNotFoundError:
-            raise FileNotFoundError('No checkpoint found to initialize BERT ' + \
-                'model at %s. Note: BERT and BERT classifier ids, ' % bert_dir + \
-                'versions and ngram-lengths must match.')
+            raise FileNotFoundError('No checkpoint found to initialize BERT ' +\
+                'model at %s. Note: BERT and BERT classifier ' % bert_dir +\
+                'ids, versions and ngram-lengths must match.')
     else:
         model_params['bert_ckpt_path'] = None
+        bert_params = config['models']['bert']
     
     # Update BERT classifier hyper-parameters with BERT hyper-parameters
-    for k, v in config['models']['bert'].items():
+    bert_params = config['models']['bert']
+    for k, v in bert_params.items():
         if k not in model_params.keys():
             model_params[k] = v
 
@@ -192,7 +201,36 @@ def set_environment(num_workers):
     return accelerator, devices
 
 
-class NoamLRLambda(_LRScheduler):
+def select_optimizer(model_weights, train_params):
+    optim_params = {'params': model_weights,
+                    'lr': train_params['lr'],
+                    'betas': train_params['adam_betas']}
+    if train_params['optimizer'] == 'adam':
+        optim_fn = torch.optim.Adam
+        optim_params.update({'weight_decay': train_params['adam_lambda']})
+    elif train_params['optimizer'] == 'adamw':
+        optim_fn = torch.optim.AdamW
+    else:
+        raise ValueError('Invalid optimizer given to the pipeline.')
+    return optim_fn(**optim_params)
+
+
+def select_scheduler(optimizer, model_params, train_params):
+    sched_params = {'optimizer': optimizer,
+                    'n_warmup_steps': train_params['n_warmup_steps']}
+    if train_params['scheduler'] == 'noam':
+        sched_fn = NoamSchedulerWithWarmup
+        sched_params.update({'d_embed': model_params['d_embed']})
+    elif train_params['scheduler'] == 'linear':
+        sched_fn = LinearSchedulerWithWarmup
+        sched_params.update(
+            {'n_warmup_steps': model_params['n_warmup_steps']})
+    else:
+        raise ValueError('Invalid scheduler given to the pipeline.')
+    return sched_fn(**sched_params)
+
+
+class NoamSchedulerWithWarmup(_LRScheduler):
     ''' Initialize the NoamLRLambda scheduler.
         
         :param d_model: size of hidden model dimension
@@ -211,7 +249,7 @@ class NoamLRLambda(_LRScheduler):
         self.d_embed = d_embed
         self.n_warmup_steps = n_warmup_steps
         self.init_lrs = [group['lr'] for group in optimizer.param_groups]
-        super(NoamLRLambda, self).__init__(optimizer, last_epoch, verbose)
+        super(NoamSchedulerWithWarmup, self).__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
         if not self._get_lr_called_within_step:
@@ -234,3 +272,15 @@ class NoamLRLambda(_LRScheduler):
             new_lr = base_lr * self.d_embed ** (-0.5) * factor
             to_return.append(new_lr)
         return to_return
+
+
+class LinearSchedulerWithWarmup(torch.optim.lr_scheduler.LambdaLR):
+    def __init__(self, optimizer, n_steps, n_warmup_steps):
+        lr_lambda = lambda s: \
+            self._linear_decrease_with_warmup(s, n_warmup_steps, n_steps)
+        super().__init__(optimizer=optimizer, lr_lambda=lr_lambda)
+    
+    def _linear_decrease_with_warmup(step, n_warmup_steps, n_steps):
+        ramp_up = step / n_warmup_steps
+        fall = 1 / (n_steps - n_warmup_steps) * (n_steps - step)
+        return min(ramp_up, fall)

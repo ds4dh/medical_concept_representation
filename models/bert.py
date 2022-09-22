@@ -39,7 +39,7 @@ class BERT(nn.Module):
                 for _ in range(n_layers)])
 
         # Final projection to predict words for each masked token
-        self.final_proj = nn.Linear(d_embed, vocab_size)  # just to try
+        self.final_proj = nn.Linear(d_embed, vocab_size)
 
     def forward(self, masked, segment_labels=None, get_embeddings_only=False):
         # Adapt the size of what is used to build the masks

@@ -37,7 +37,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
         
-    def step(self, batch, mode):
+    def step(self, batch, batch_idx, mode):
         """ Proceed forward pass of the mode ('train' or 'val'), compute loss
             Note: the loss function used to compute the loss is model-specific       
         """
@@ -46,22 +46,27 @@ class PytorchLightningWrapper(pl.LightningModule):
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         outputs = self.model(**inputs)
         
-        # Compute loss and other metrics
+        # Compute loss and other metrics that may be defined in the model
         loss = self.model.loss_fn(outputs, **labels)
-        to_return = {'loss': loss}
+        returned = {'loss': loss}
         if hasattr(self.model, '%s_metric' % mode):
-            to_return.update(self.model.val_metric(outputs, **labels))
+            metric_fn = getattr(self.model, '%s_metric' % mode)
+            returned.update(metric_fn(logger=self.logger.experiment,
+                                      batch_idx=batch_idx,
+                                      step=self.global_step,
+                                      outputs=outputs,
+                                      **labels))
         
         # Log loss and other metrics, and return them to the pl-module
         btch_sz = outputs.size(0)
-        for k, v in to_return.items():
+        for k, v in returned.items():
             self.log('%s_%s' % (mode, k), v.cpu().detach(), batch_size=btch_sz)
-        return to_return
+        return returned
     
     def training_step(self, batch, batch_idx):
         """ Perform training step and return loss (see step)
         """
-        return self.step(batch, 'train')
+        return self.step(batch, batch_idx, 'train')
             
     def validation_step(self, batch, batch_idx):
         # USEFULENESS OF VALIDATION SET? GOOD TO AVOID FITTING HYPERPARAMETERS ON THE TEST SET
@@ -69,17 +74,17 @@ class PytorchLightningWrapper(pl.LightningModule):
         # OR AT LEAST WE NEED TO EMBED ALL THE CONCEPTS (SO NOT LOOSING SOME OF THEM JUST BECAUSE WE WANT VALIDATION)
         """ Perform validation step and return loss (see step)
         """
-        return self.step(batch, 'val')
+        return self.step(batch, batch_idx, 'val')
         
     def validation_epoch_end(self, outputs):
         """ Log metrics from the output of the last validation step
         """
         pass  # TODO: see if we implement anything here
     
-    # def test_step(self, batch, batch_idx):
-    #     """ Perform a testing step with the trained model
-    #     """
-    #     pass  # TODO: implemement the pca visualization as in glove code
+    def test_step(self, batch, batch_idx):
+        """ Perform a testing step with the trained model
+        """
+        return self.step(batch, batch_idx, 'test')
 
     # def test_epoch_end(output):
     #     model.export_as_gensim(output)
@@ -111,18 +116,8 @@ class PytorchLightningWrapper(pl.LightningModule):
     def configure_optimizers(self):
         """ Return the optimizer and the scheduler
         """
-        optim_params = {'params': self.parameters(),
-                        'lr': train_params['lr'],
-                        'betas': train_params['adam_betas']}
-        if train_params['optimizer'] == 'adamw':
-            optim_params.update({'weight_decay': train_params['adam_lambda']})
-            optim = torch.optim.AdamW(**optim_params)
-        else:
-            optim = torch.optim.Adam(**optim_params)
-        sched_params = {'optimizer': optim,
-                        'd_embed': model_params['d_embed'],
-                        'n_warmup_steps': train_params['n_warmup_steps']}
-        sched = utils.NoamLRLambda(**sched_params)
+        optim = utils.select_optimizer(self.parameters(), train_params)
+        sched = utils.select_scheduler(optim, model_params, train_params)
         sched_dict = {'scheduler': sched, 'interval': 'step', 'frequency': 1}
         return [optim], [sched_dict]
 
@@ -168,14 +163,14 @@ def main():
                          accumulate_grad_batches= \
                             train_params['accumulate_grad_batches'],
                          gradient_clip_val=0.0,
-                         num_sanity_val_steps=0,
                          log_every_n_steps=10,
                          max_steps=train_params['n_steps'],
                          callbacks=callbacks,
                          logger=logger)
     
-    # Train model
+    # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
+    trainer.test()
 
 
 if __name__ == '__main__':

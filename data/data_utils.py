@@ -16,16 +16,14 @@ from torchdata.datapipes.iter import (
 
 
 def save_dp(dp, save_path):
-    print('THIS FUNCTION IS NOT WORKING YET')
     with open(save_path, 'wb') as handle:
         pickle.dump(dp, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def load_dp(load_path):
-    print('THIS FUNCTION IS NOT WORKING YET')
     with open(load_path, 'rb') as file:
         saved_dp = pickle.load(file)
-    return saved_dp
+        return saved_dp
 
 
 class JsonReader(IterDataPipe):

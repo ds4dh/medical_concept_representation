@@ -29,11 +29,7 @@ class BERTClassifier(nn.Module):
         else:
             print('BERT weights trained from scratch with the classifier.')
         
-        self.classifier = nn.Sequential(nn.Linear(d_embed, d_embed),
-                                        nn.Tanh(),
-                                        nn.Dropout(dropout),
-                                        nn.Linear(d_embed, n_classes))
-        
+        self.classifier = nn.Linear(d_embed, n_classes)
         self.loss_fn = BertClassifierLoss(n_classes, pos_weights)
         
     def forward(self, sample):
@@ -70,27 +66,46 @@ class BERTClassifier(nn.Module):
                 if 'norm' in name:
                     param.requires_grad = True
     
-    def val_metric(self, model_output, label, threshold=0.5):
+    def val_metric(self, logger, batch_idx, step, outputs, label,
+                   test_mode=False, thresh=0.5):
         """ Compute different metrics and scores for the model output
         """
-        logits = torch.sigmoid(model_output)
-        pred = (logits > threshold).float()
+        # Load data and generate logits
+        logits = torch.sigmoid(outputs)
         gold = self.loss_fn.multi_label_one_hot(label)
-        gold = gold.to(model_output.device).float()
+        gold = gold.to(outputs.device).float()
+
+        # Compute top1 accuracy and log it
+        pred = (logits > thresh).float()
         correct = [p.tolist() == g.tolist() for p, g in zip(pred, gold)]
-        top1 = sum(correct) / len(correct)       # exact match proportion
-        
+        top1 = torch.tensor(correct).float().mean()
+        if batch_idx == 0:
+            for s, (p, g) in enumerate(zip(pred, gold)):
+                pred_list = [i for i, x in enumerate(p.tolist()) if x == 1]
+                gold_list = [i for i, x in enumerate(g.tolist()) if x == 1]
+                to_log = 'top1: %s, thresh = %s  \npred: %s  \ngold: %s'\
+                        % (top1, thresh, str(pred_list), str(gold_list))
+                logger.add_text('sample %s' % s, to_log, global_step=step)
+                if not test_mode: break
+
+        # Compute true / false positive / negative rates
         TP = (pred * gold).mean()                # true positives
         TN = ((1 - pred) * (1 - gold)).mean()    # true negatives
         FP = ((pred - gold) > 0).float().mean()  # false positives
         FN = ((gold - pred) > 0).float().mean()  # false negatives
         
+        # Compute metrics
         acc = (TP + TN) / (FP + FN + TP + TN)    # accuracy
         prec = TP / (FP + TP)                    # precision
         rec = TP / (FN + TP)                     # recall
         f1 = 2 * (prec * rec) / (prec + rec)     # f1-score
         
         return {'top1': top1, 'acc': acc, 'prec': prec, 'rec': rec, 'f1': f1}
+
+    def test_metric(self, **kwargs):
+        """ Compute same metrics as in validation but with more samples
+        """
+        return self.val_metric(test_mode=True, **kwargs)
     
 
 class BertClassifierLoss(nn.Module):
