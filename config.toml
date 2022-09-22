@@ -1,8 +1,8 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo',
   #                  'bert', 'bert_classifier', 'transformer'
+  exp_id = 'test'
   model_used = 'fasttext'
-  model_id = 'test'
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_min_len = 0  # 0 for word encoding, > 0 for subword encoding
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
@@ -21,15 +21,15 @@
   max_seq_len = 512
 
 [train]
-  lr = 2.0
-  optimizer = 'adamw'  # adam, adamw
-  scheduler = 'noam'  # 'noam', 'linear'
-  adam_betas = [0.9, 0.998]  # momentum
-  adam_lambda = 0.01  # weight decay (only for adamw optimizer)
+  optimizer = 'adamw'  # adam, radam, adamw
+  scheduler = 'linear'  # 'noam', 'linear'
+  lr = 0.001  # initial learning rate (after warmup) (note: for noam scheduler, actual value is lower)
+  betas = [0.9, 0.998]  # momentum
+  weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
   n_steps = 500000
-  n_warmup_steps = 10000
+  n_warmup_steps = 0
 
 [models]
   [models.fasttext]

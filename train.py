@@ -1,8 +1,8 @@
 import argparse
-import utils
+import models
 import data
 import pytorch_lightning as pl
-import torch
+import train_utils
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
@@ -14,7 +14,7 @@ parser = argparse.ArgumentParser(description='Train and test model.')
 parser.add_argument('--config_path', '-c', type=str, default='./config.toml')
 args = parser.parse_args()
 model, run_params, data_params, train_params, model_params = \
-    utils.load_model_and_params_from_config(args.config_path)
+    models.load_model_and_params_from_config(args.config_path)
 
 
 class PytorchLightningWrapper(pl.LightningModule):
@@ -116,8 +116,8 @@ class PytorchLightningWrapper(pl.LightningModule):
     def configure_optimizers(self):
         """ Return the optimizer and the scheduler
         """
-        optim = utils.select_optimizer(self.parameters(), train_params)
-        sched = utils.select_scheduler(optim, model_params, train_params)
+        optim = train_utils.select_optimizer(self.parameters(), train_params)
+        sched = train_utils.select_scheduler(optim, model_params, train_params)
         sched_dict = {'scheduler': sched, 'interval': 'step', 'frequency': 1}
         return [optim], [sched_dict]
 
@@ -127,20 +127,20 @@ def main():
         data, and train the model to perform a model-specific task
     """
     # Load checkpoint path if needed (set to None if no checkpoint)
-    ckpt_path, new_model_version = utils.load_checkpoint(
-        model_params['model_name'], **run_params)
+    ckpt_path, log_dir, new_model_version = \
+        models.load_checkpoint(model_params['model_name'], **run_params)
     
     # Update params if model_version changed and save config file to model logs
-    utils.update_and_save_config(args.config_path,
-                                 run_params,
-                                 model_params['model_name'],
-                                 new_model_version)
+    models.update_and_save_config(args.config_path,
+                                  run_params,
+                                  model_params['model_name'],
+                                  new_model_version)
     
     # Load pytorch lightning model-data wrapper
     model_data_wrapper = PytorchLightningWrapper()
 
     # Set environment
-    accelerator, devices = utils.set_environment(run_params['num_workers'])
+    accelerator, devices = models.set_environment(run_params['num_workers'])
     
     # Callbacks for logging and checkpointing
     callbacks = [LearningRateMonitor(logging_interval='step'),
@@ -152,12 +152,12 @@ def main():
                                  save_on_train_epoch_end=None)]
     
     # Set a logger to monitor progress on tensorboard
-    logger = pl.loggers.TensorBoardLogger(save_dir='logs/',
+    logger = pl.loggers.TensorBoardLogger(save_dir=log_dir,
                                           name=model_params['model_name'],
                                           version=new_model_version)
     
     # Set a trainer to train the model
-    trainer = pl.Trainer(default_root_dir='logs',
+    trainer = pl.Trainer(default_root_dir=log_dir,
                          accelerator=accelerator,
                          devices=devices,
                          accumulate_grad_batches= \
@@ -170,7 +170,7 @@ def main():
     
     # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    trainer.test()
+    trainer.test(ckpt_path='last')
 
 
 if __name__ == '__main__':

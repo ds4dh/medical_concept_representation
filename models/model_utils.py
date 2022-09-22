@@ -1,10 +1,8 @@
 import os
 import json
 import toml
-import warnings
-import models
 import torch
-from torch.optim.lr_scheduler import _LRScheduler
+import models
 
 
 def load_model_and_params_from_config(config_path):
@@ -39,7 +37,7 @@ def load_model_and_params_from_config(config_path):
     ngram_str = 'ngram-min%s-max%s' % (run_params['ngram_min_len'],
                                        run_params['ngram_max_len'])
     model_used = run_params['model_used']
-    model_name = '_'.join([model_used, ngram_str, run_params['model_id']])
+    model_name = '_'.join([model_used, ngram_str])
     
     # Retrieve corresponding model code
     assert(model_used) in models.AVAILABLE_MODELS.keys(), 'Selected model ' +\
@@ -88,8 +86,9 @@ def update_bert_params(config, model_name, model_params):
             bert_config = toml.load(os.path.join(bert_path, 'config.toml'))
             bert_params = bert_config['models']['bert']
         else:
+            log_dir = os.path.join('logs', config['run_params']['exp_dir'])
             version = 'version_%s' % config['run']['model_version']
-            bert_dir = os.path.join('logs', model_name, version, 'checkpoints')
+            bert_dir = os.path.join(log_dir, model_name, version, 'checkpoints')
             bert_dir = bert_dir.replace('bert_classifier', 'bert')
             bert_params = config['models']['bert']
         try:
@@ -110,17 +109,18 @@ def update_bert_params(config, model_name, model_params):
             model_params[k] = v
 
 
-def load_checkpoint(model_name, model_version, load_model, **kwargs):
+def load_checkpoint(model_name, exp_id, model_version, load_model, **kwargs):
     """ Try to find a checkpoint path for the model from the log directory.
         If no checkpoint is found, None is returned (start from scratch).
     """
-    model_dir = os.path.join('logs', model_name, f'version_{model_version}')
+    log_dir = os.path.join('logs', exp_id)
+    model_dir = os.path.join(log_dir, model_name, f'version_{model_version}')
     if load_model:
         ckpt_path = find_existing_checkpoint(model_dir)
     else:
         ckpt_path = None
         model_version = initialize_new_checkpoint_dir(model_dir, model_version)
-    return ckpt_path, model_version
+    return ckpt_path, log_dir, model_version
 
 
 def find_existing_checkpoint(model_dir):
@@ -171,8 +171,11 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
     """
     # Find config paths
     old_config_path = config_path
-    new_logdir = os.path.join('logs', model_name, f'version_{new_model_version}')
-    new_config_path = os.path.join(new_logdir, 'config.toml')
+    new_config_path = os.path.join('logs',
+                                   run_params['exp_id'],
+                                   model_name,
+                                   'version_%s' % new_model_version,
+                                   'config.toml')
     
     # Find model versions and update run parameters in case of later use
     old_model_version = run_params['model_version']
@@ -189,8 +192,8 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
                 if to_replace in line:
                     line = line.replace(to_replace, replace_by)
                 new_config_file.write(line)
-                
-            
+
+
 def set_environment(num_workers):
     """ Update environment if needed and check how many gpu can be used 
     """
@@ -199,88 +202,3 @@ def set_environment(num_workers):
     accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
     devices = 1 if accelerator == 'gpu' else num_workers
     return accelerator, devices
-
-
-def select_optimizer(model_weights, train_params):
-    optim_params = {'params': model_weights,
-                    'lr': train_params['lr'],
-                    'betas': train_params['adam_betas']}
-    if train_params['optimizer'] == 'adam':
-        optim_fn = torch.optim.Adam
-        optim_params.update({'weight_decay': train_params['adam_lambda']})
-    elif train_params['optimizer'] == 'adamw':
-        optim_fn = torch.optim.AdamW
-    else:
-        raise ValueError('Invalid optimizer given to the pipeline.')
-    return optim_fn(**optim_params)
-
-
-def select_scheduler(optimizer, model_params, train_params):
-    sched_params = {'optimizer': optimizer,
-                    'n_warmup_steps': train_params['n_warmup_steps']}
-    if train_params['scheduler'] == 'noam':
-        sched_fn = NoamSchedulerWithWarmup
-        sched_params.update({'d_embed': model_params['d_embed']})
-    elif train_params['scheduler'] == 'linear':
-        sched_fn = LinearSchedulerWithWarmup
-        sched_params.update(
-            {'n_warmup_steps': model_params['n_warmup_steps']})
-    else:
-        raise ValueError('Invalid scheduler given to the pipeline.')
-    return sched_fn(**sched_params)
-
-
-class NoamSchedulerWithWarmup(_LRScheduler):
-    ''' Initialize the NoamLRLambda scheduler.
-        
-        :param d_model: size of hidden model dimension
-        :param factor: multiplicative factor
-        :param warmup: number of warmup steps
-        :param last_epoch: index of last epoch
-        :param verbose: print logs
-
-    '''
-    def __init__(self,
-                 optimizer,
-                 d_embed,
-                 n_warmup_steps=8000,
-                 last_epoch=-1,
-                 verbose=False):
-        self.d_embed = d_embed
-        self.n_warmup_steps = n_warmup_steps
-        self.init_lrs = [group['lr'] for group in optimizer.param_groups]
-        super(NoamSchedulerWithWarmup, self).__init__(optimizer, last_epoch, verbose)
-
-    def get_lr(self):
-        if not self._get_lr_called_within_step:
-            warnings.warn('To get the last learning rate computed by the \
-                          scheduler, please use get_last_lr().',
-                          UserWarning)
-        step = self._step_count
-        to_return = []
-        for init_lr in self.init_lrs:
-            factor = min(step ** (-0.5), step * self.n_warmup_steps ** (-1.5))
-            new_lr = init_lr * self.d_embed ** (-0.5) * factor
-            to_return.append(new_lr)
-        return to_return
-
-    def _get_closed_form_lr(self):
-        step = self._step_count
-        to_return = []
-        for base_lr in self.base_lrs:
-            factor = min(step ** (-0.5), step * self.n_warmup_steps ** (-1.5))
-            new_lr = base_lr * self.d_embed ** (-0.5) * factor
-            to_return.append(new_lr)
-        return to_return
-
-
-class LinearSchedulerWithWarmup(torch.optim.lr_scheduler.LambdaLR):
-    def __init__(self, optimizer, n_steps, n_warmup_steps):
-        lr_lambda = lambda s: \
-            self._linear_decrease_with_warmup(s, n_warmup_steps, n_steps)
-        super().__init__(optimizer=optimizer, lr_lambda=lr_lambda)
-    
-    def _linear_decrease_with_warmup(step, n_warmup_steps, n_steps):
-        ramp_up = step / n_warmup_steps
-        fall = 1 / (n_steps - n_warmup_steps) * (n_steps - step)
-        return min(ramp_up, fall)
