@@ -74,7 +74,7 @@ class DataPipeline():
             return tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
         elif task == 'cooc':
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
-        elif task == ['bilm', 'mt', 'reagent_pred_mt']:
+        elif task in ['bilm', 'mt', 'reagent_pred_mt']:
             return tasks.EosBosAdder(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
             return tasks.DynamicMasker(dp, self.tokenizer)
