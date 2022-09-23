@@ -51,10 +51,29 @@ class Tokenizer():
 
 
 class SubWordTokenizer():
+    """ Subword-level tokenizer.
+
+        Parameters
+        ----------
+        - ngram_min_len (int)
+            minimum length of ngrams in tokenized subwords
+        - ngram_max_len (int)
+            maximum length of ngrams in tokenized subwords
+        - special_tokens (list of str)
+            tokens used in the model for unknown words, padding, masking,
+            starting/closing sentences, etc.
+        - min_freq (int)
+            minimum frequency at which a word should occur in the corpus to have
+            its own token_id (else: token_id of '[UNK]')
+        - brackets (list of 2 str)
+            special characters used to differentiate similar words and subwords
+            (e.g., word '<her>' vs subword 'her' subword word <where>)
+        - mode (str)
+            how ngrams are computed ('subword' for classic ngrams, 'icd' for
+            ngrams suited to icd codes (forward-only ngrams))
+    
     """
-    Subword-level tokenizer.
-    """
-    def __init__(self, ngram_min_len, ngram_max_len, special_tokens,
+    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode, special_tokens,
                  min_freq=0, brackets=['<', '>']):
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
@@ -64,22 +83,26 @@ class SubWordTokenizer():
         self.ngram_len = list(range(ngram_min_len, ngram_max_len + 1))
         self.min_freq = min_freq
         self.brackets = brackets
-        self.forbidden_ngram = brackets + list(special_tokens.keys())
+        self.forbidden_ngrams = brackets + list(special_tokens.keys())
+        self.ngram_mode = ngram_mode
 
     @staticmethod
     def _flatten(t):
         return [item for sublist in t for item in sublist]
 
     @staticmethod
-    def _generate_ngram(txt, length, forbidden_ngram):
-        # TODO: see what type of ngram we want (Dimitris had an idea)
-        # NOTE: the if check may be done in _generate_ngrams? (more efficient?)
-        return [ngram for ngram in ["".join(i) for i in ngrams(txt, length)]
-                if (ngram not in forbidden_ngram) and (txt[1:-1] not in ngram)]
+    def _generate_ngrams(word, length, forbidden_ngram):
+        return [ngram for ngram in ["".join(i) for i in ngrams(word, length)]
+                if (ngram not in forbidden_ngram) and (word[1:-1] not in ngram)]
+    
+    @staticmethod
+    def _generate_icd_ngrams(txt):
+        # TODO: do this only for appropriate codes (DIA, PRO, MED?, LAB?)
+        return [txt[:i] for i in range(1, len(txt))]
 
-    def _generate_ngrams(self, text):
-        return self._flatten([self._generate_ngram(
-            text, i, self.forbidden_ngram) for i in self.ngram_len])
+    def _generate_multi_ngrams(self, word):
+        return self._flatten([self._generate_ngrams(
+            word, i, self.forbidden_ngrams) for i in self.ngram_len])
     
     def _add_brackets(self, word):
         return self.brackets[0] + word + self.brackets[1]
@@ -96,12 +119,17 @@ class SubWordTokenizer():
         inds = word_counts.argsort()[::-1]  # most occurent first
         unique_words = unique_words[inds]
 
-        # Add special brackets to indicate whole words
-        unique_whole_words = [self._add_brackets(w) for w in unique_words]
-        
         # Compute ngram vocabulary
-        unique_ngrams = self._flatten(
-            [self._generate_ngrams(word) for word in unique_whole_words])
+        if self.ngram_mode == 'subword':
+            unique_whole_words = [self._add_brackets(w) for w in unique_words]
+            unique_ngrams = self._flatten([self._generate_multi_ngrams(word)
+                                           for word in unique_whole_words])
+        elif self.ngram_mode == 'icd':
+            unique_whole_words = unique_words
+            unique_ngrams = self._flatten([self._generate_icd_ngrams(word)
+                                           for word in unique_whole_words])
+        else:
+            raise ValueError('Unknown ngramization mode %s' % self.ngram_mode)
 
         # Sort ngram vocabulary
         unique_ngrams, ngram_counts = np.unique(
@@ -109,17 +137,17 @@ class SubWordTokenizer():
         inds = ngram_counts.argsort()[::-1]
         unique_ngrams = unique_ngrams[inds]
 
-        # Generate word level encoder (using '<...>' words!)
+        # Generate word level encoder
         self.encoder.update({word: (i + len(self.special_tokens))
                             for i, word in enumerate(unique_whole_words)})
 
         # Store word count for every word (useful for skipgram dataset)
+        self.n_words = len(self.encoder)  # might be useful for elmo (let's see)
         self.word_counts = {self.encoder[word]: count for word, count in \
                             zip(unique_whole_words, sorted(word_counts)[::-1])}
 
         # Update encoder with ngram level vocabulary
-        len_so_far = len(self.encoder)
-        self.encoder.update({i: (idx + len_so_far)
+        self.encoder.update({i: (idx + self.n_words)
                             for idx, i in enumerate(unique_ngrams)})
 
         # Decoder
@@ -130,7 +158,7 @@ class SubWordTokenizer():
         # Generate n-grams and add them to the word
         if word not in self.special_tokens:
             bracket_word = self._add_brackets(word)
-            seq = [bracket_word] + self._generate_ngrams(bracket_word)
+            seq = [bracket_word] + self._generate_multi_ngrams(bracket_word)
         else:
             seq = [word]
 

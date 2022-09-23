@@ -20,6 +20,7 @@ class DataPipeline():
             self.n_classes = model_params['n_classes']
         
         # Load tokenizer and train it
+        self.ngram_mode = run_params['ngram_mode']
         self.ngram_min_len = run_params['ngram_min_len']
         self.ngram_max_len = run_params['ngram_max_len']
         self.max_tokens = train_params['max_tokens_per_batch']
@@ -86,14 +87,17 @@ class DataPipeline():
         """ Load and train a tokenizer with / without ngrams
         """
         # Load the tokenizer
-        if self.ngram_max_len == 0:
+        if self.ngram_mode == 'word':
             tokenizer = data.Tokenizer(self.special_tokens)
-        elif self.ngram_min_len <= self.ngram_max_len:
+        elif self.ngram_mode in ['subword', 'icd']:
+            if self.ngram_mode == 'subword':
+                assert self.ngram_min_len > 0, 'Invalid ngram lengths.'
             tokenizer = data.SubWordTokenizer(self.ngram_min_len,
                                               self.ngram_max_len,
+                                              self.ngram_mode,
                                               self.special_tokens)
         else:
-            raise Exception('Invalid ngram lengths given to the pipeline.')
+            raise Exception('Invalid ngram mode given to the pipeline.')
         
         # Figure out which type of input the tokenizer should encode
         if 'tokenizer_task' in model_params:
