@@ -117,7 +117,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         """ Return the optimizer and the scheduler
         """
         optim = train_utils.select_optimizer(self.parameters(), train_params)
-        sched = train_utils.select_scheduler(optim, model_params, train_params)
+        sched = train_utils.select_scheduler(optim, train_params)
         sched_dict = {'scheduler': sched, 'interval': 'step', 'frequency': 1}
         return [optim], [sched_dict]
 

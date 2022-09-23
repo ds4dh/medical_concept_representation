@@ -6,7 +6,7 @@
   model_version = 0  # bert_classifier uses pretrained bert from same version
   ngram_min_len = 0  # 0 for word encoding, > 0 for subword encoding
   ngram_max_len = 0  # 0 for word encoding, > 0 for subword encoding
-  debug = false
+  debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
@@ -23,13 +23,13 @@
 [train]
   optimizer = 'adamw'  # adam, radam, adamw
   scheduler = 'linear'  # 'noam', 'linear'
-  lr = 0.001  # initial learning rate (after warmup) (note: for noam scheduler, actual value is lower)
+  lr = 0.001  # learning rate after warmup
   betas = [0.9, 0.998]  # momentum
   weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
-  n_steps = 500000
-  n_warmup_steps = 0
+  n_steps = 100000
+  n_warmup_steps = 10000
 
 [models]
   [models.fasttext]

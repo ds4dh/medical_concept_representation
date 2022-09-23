@@ -19,12 +19,11 @@ def select_optimizer(model_weights, train_params):
     return optim_fn(**optim_params)
 
 
-def select_scheduler(optimizer, model_params, train_params):
+def select_scheduler(optimizer, train_params):
     sched_params = {'optimizer': optimizer,
                     'n_warmup_steps': train_params['n_warmup_steps']}
     if train_params['scheduler'] == 'noam':
         sched_fn = NoamSchedulerWithWarmup
-        sched_params.update({'d_embed': model_params['d_embed']})
     elif train_params['scheduler'] == 'linear':
         sched_fn = LinearSchedulerWithWarmup
         sched_params.update({'n_steps': train_params['n_steps']})
@@ -43,40 +42,34 @@ class NoamSchedulerWithWarmup(_LRScheduler):
         :param verbose: print logs
 
     '''
-    def __init__(self,
-                 optimizer,
-                 d_embed,
-                 n_warmup_steps=8000,
-                 last_epoch=-1,
-                 verbose=False):
-        self.d_embed = d_embed
+    def __init__(self, optimizer, n_warmup_steps=8000):
         self.n_warmup_steps = n_warmup_steps
         self.init_lrs = [group['lr'] for group in optimizer.param_groups]
-        super(NoamSchedulerWithWarmup, self).__init__(optimizer,
-                                                      last_epoch,
-                                                      verbose)
+        super(NoamSchedulerWithWarmup, self).__init__(optimizer)
 
     def get_lr(self):
         if not self._get_lr_called_within_step:
             warnings.warn('To get the last learning rate computed by the \
                           scheduler, please use get_last_lr().',
                           UserWarning)
-        step = self._step_count
-        to_return = []
-        for init_lr in self.init_lrs:
-            factor = min(step ** (-0.5), step * self.n_warmup_steps ** (-1.5))
-            new_lr = init_lr * self.d_embed ** (-0.5) * factor
-            to_return.append(new_lr)
-        return to_return
+        return self._get_lr_fn(self.init_lrs)
 
     def _get_closed_form_lr(self):
+        return self._get_lr_fn(self.base_lrs)
+    
+    def _get_lr_fn(self, init_lrs):
         step = self._step_count
         to_return = []
-        for base_lr in self.base_lrs:
-            factor = min(step ** (-0.5), step * self.n_warmup_steps ** (-1.5))
-            new_lr = base_lr * self.d_embed ** (-0.5) * factor
-            to_return.append(new_lr)
+        for init_lr in init_lrs:
+            factor = self._compute_factor(step)
+            to_return.append(init_lr * factor)
         return to_return
+    
+    def _compute_factor(self, step):
+        base_factor = max(self.n_warmup_steps, 1) ** 0.5
+        step_factor = min(max(step, 1) ** (-0.5),
+                          step * max(self.n_warmup_steps, 1) ** (-1.5))
+        return base_factor * step_factor
 
 
 class LinearSchedulerWithWarmup(torch.optim.lr_scheduler.LambdaLR):
