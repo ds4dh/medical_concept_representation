@@ -1,5 +1,6 @@
 from .fasttext import FastText
 from .glove import Glove
+from .elmo import ELMO
 from .transformer import Transformer
 from .bert import BERT
 from .bert_classifier import BERTClassifier
@@ -12,6 +13,7 @@ from .model_utils import (
 
 AVAILABLE_MODELS = {'fasttext': FastText,
                     'glove': Glove,
+                    'elmo': ELMO,
                     'transformer': Transformer,
                     'bert': BERT,
                     'bert_classifier': BERTClassifier}
