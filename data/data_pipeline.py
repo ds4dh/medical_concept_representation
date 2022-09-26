@@ -53,7 +53,7 @@ class DataPipeline():
     def select_parse_pipeline(self, dp, task):
         """ Set how data is parsed for the model after being read
         """
-        if task in ['skipgram', 'cooc', 'mlm']:
+        if task in ['skipgram', 'cooc', 'lm', 'mlm']:
             return dp
         elif task == 'reagent_pred_mt':
             return tasks.ReagentPredParser(dp, task)
@@ -74,8 +74,10 @@ class DataPipeline():
             return tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
         elif task == 'cooc':
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
-        elif task in ['bilm', 'mt', 'reagent_pred_mt']:
-            return tasks.EosBosAdder(dp, self.tokenizer)
+        elif task in ['mt', 'reagent_pred_mt']:
+            return tasks.BosEosAdder(dp, self.tokenizer)
+        elif task == 'lm':
+            return tasks.ElmoSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
             return tasks.DynamicMasker(dp, self.tokenizer)
         elif task == 'reagent_pred_cls':
@@ -89,9 +91,7 @@ class DataPipeline():
         # Load the tokenizer
         if self.ngram_mode == 'word':
             tokenizer = data.Tokenizer(self.special_tokens)
-        elif self.ngram_mode in ['subword', 'icd']:
-            if self.ngram_mode == 'subword':
-                assert self.ngram_min_len > 0, 'Invalid ngram lengths.'
+        elif self.ngram_mode in ['subword', 'icd', 'char']:
             tokenizer = data.SubWordTokenizer(self.ngram_min_len,
                                               self.ngram_max_len,
                                               self.ngram_mode,

@@ -4,63 +4,90 @@ from torch import relu, sigmoid
 
 
 class ELMO(nn.Module):
-    def __init__(self, d_convs, k_sizes, d_emb_char, d_emb_word,
-                 n_lstm_layers, token_type, vocab_size, char_vocab_size,
-                 word_vocab_size, dropout=0.5):
+    def __init__(self, n_lstm_layers, d_lstm, d_embed_char, d_embed_word,
+                 d_conv, k_size, vocab_sizes, special_tokens, add_words,
+                 dropout=0.5, *args, **kwargs):
         super().__init__()
-        self.token_type = token_type
-        if token_type in ['words', 'words_and_chars']:
-            self.word_embedding = nn.Embedding(word_vocab_size, d_emb_word)
-        if token_type in ['chars', 'words_and_chars']:
-            self.char_embedding = nn.Embedding(char_vocab_size, d_emb_char)
-            self.char_cnn = CharCNN(d_convs, k_sizes, d_emb_char, d_emb_word)
-        self.word_lstm = WordLSTM(n_lstm_layers, d_emb_word, dropout)
-        self.dropout = nn.Dropout(p=dropout)
+        # Retrieve vocabulary information
+        self.pad_id = special_tokens['[PAD]']
+        self.special_token_ids = list(special_tokens.values())
+        self.n_words = vocab_sizes['word']
+        
+        # Check types of token embeddings used in the model
+        self.token_type = 'word' if 'ngram' not in vocab_sizes else 'char'
+        if add_words:
+            assert self.token_type == 'char', 'The model requires ngram ' + \
+                'lengths > 0 to add whole word embeddings to char embeddings.'
+            self.token_type = 'both'
+        
+        # Word embeddings
+        word_vocab_size = vocab_sizes['word'] + vocab_sizes['special']
+        if self.token_type in ['word', 'both']:
+            self.word_embedding = nn.Embedding(word_vocab_size,
+                                               d_embed_word,
+                                               padding_idx=self.pad_id)
+        
+        # Layers from character to word embeddings
+        if self.token_type in ['char', 'both']:
+            char_vocab_size = vocab_sizes['ngram'] + vocab_sizes['special']
+            self.char_embedding = nn.Embedding(char_vocab_size,
+                                               d_embed_char,
+                                               padding_idx=self.pad_id)
+            self.char_cnn = CharCNN(d_conv, k_size, d_embed_char, d_embed_word)
+        
+        # Network layers
+        self.word_lstm = WordLSTM(d_embed_word, d_lstm, n_lstm_layers, dropout)
+        self.final_proj = nn.Linear(2 * d_embed_word, word_vocab_size)
+
+        # Loss function used by the model
         self.loss_fn = ELMOLoss()
         
-    def forward(self, sample, return_all_states=False):
+    def forward(self, chars, words, return_all_states=False):
         """ Forward pass of the ELMO model
-            - Input (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
+            - Inputs:
+                chars (batch_size, seq_len, ngram_len)
+                words (batch_size, seq_len)
             - Output (batch_size, seq_len, d_emb_word)
         """
-        static_emb = self.compute_static_embeddings(sample)
-        context_emb = self.word_lstm(static_emb)
-        return self.dropout(context_emb)
+        # char_emb = self.char_embedding(chars)
+        # static_emb = self.char_cnn(char_emb)
+        static_emb = self.compute_static_embeddings(chars, words)
+        context_emb = self.word_lstm(static_emb, return_all_states)
+        if return_all_states:
+            return context_emb  # for downstream task
+        else:
+            return self.final_proj(context_emb)  # for pre-training
 
-    def compute_static_embeddings(self, sample):
-        if self.token_type == 'words':
-            return self.word_embedding(sample)
-        
-        elif self.token_type == 'chars':
-            char_emb = self.char_embedding(sample[:, :, 1:])
+    def compute_static_embeddings(self, chars, words):       
+        """ Create word static embeddings from characters and/or words
+            - Inputs:
+                chars (batch_size, seq_len, ngram_len)
+                words (batch_size, seq_len)
+            - Output (batch_size, seq_len, d_emb_word)
+        """ 
+        if self.token_type == 'char':
+            char_emb = self.char_embedding(chars)
             return self.char_cnn(char_emb)
         
-        elif self.token_type == 'words_and_chars':
-            word_emb = self.word_embedding(sample[:, :, 0])
-            char_emb = self.char_embedding(sample[:, :, 1:])
-            char_emb = self.char_cnn(char_emb)
-            return self.combine_word_char_embeddings(word_emb, char_emb)
+        elif self.token_type == 'word':
+            return self.word_embedding(words)
         
-        else:
-            raise ValueError(
-                'Invalid use_word parameter (words, chars, words_and_chars)')
+        elif self.token_type == 'both':
+            char_emb = self.char_embedding(chars)
+            char_emb = self.char_cnn(char_emb)
+            word_emb = self.word_embedding(words)
+            return self.combine_word_char_embeddings(char_emb, word_emb)
     
-    def combine_word_char_embeddings(self, word_emb, char_emb):
-        pass
-
-    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+    def combine_word_char_embeddings(self, char_emb, word_emb, reduce='mean'):
         if reduce == 'mean':
-            norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
-            return x.mean(dim=dim) / norm_factor
+            return (char_emb + word_emb) / 2
         else:
-            return x.sum(dim=dim)
+            return char_emb + word_emb
 
-    def get_embeddings(self, sample):
+    def get_embeddings(self):
         """ Compute embeddings for ELMO model
-            - Input (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
-            - Output (batch_size, seq_len, d_emb_word, 2 * n_lstm_layers + 1)
         """
-        pass  # not implemented yet
+        ...
         
 
 class ELMOLoss(nn.Module):
@@ -69,9 +96,9 @@ class ELMOLoss(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, target):
-        logits = self.log_softmax(model_output)
-        return self.nlll_loss(logits, target)
+    def forward(self, model_output, words):
+        logits = self.log_softmax(model_output).transpose(2, 1)
+        return self.nlll_loss(logits, words)
     
 
 class CharCNN(nn.Module):
@@ -83,22 +110,33 @@ class CharCNN(nn.Module):
                       kernel_size=k_size,  # kernel_size is like n-gram
                       bias=True)
             for (d_conv, k_size) in zip(d_convs, k_sizes)])
-        d_conv_sum = sum([d_convs])
         self.activ_fn = activ_fn
-        self.highway = Highway(d_conv_sum, n_layers=2)
-        self.final_proj = nn.Linear(d_conv_sum, d_emb_word)
+        self.highway = Highway(sum(d_convs), n_layers=2)
+        self.word_emb_proj = nn.Linear(sum(d_convs), d_emb_word)
     
     def forward(self, x):
         """ Forward pass of the character-cnn module
-            - Input has shape (batch_size, seq_len, d_emb_char)
+            - Input has shape (batch_size, seq_len, n_char_max, d_emb_char)
             - Output has shape (batch_size, seq_len, d_emb_word)
         """
+        # import pdb; pdb.set_trace()
+        x = self._reshape(x)
         cnn_out_list = []
         for layer in self.cnn_layers:
-            cnn_out = self.activ_fn(layer(x).max(dim=-2))
-            cnn_out_list.append(cnn_out)
-        concat = torch.cat(cnn_out_list, dim=-1)
-        return self.final_proj(self.highway(concat))
+            cnn_out, _ = torch.max(layer(x), dim=-1)
+            cnn_out_list.append(self.activ_fn(cnn_out))
+        concat = self._deshape(torch.cat(cnn_out_list, dim=-1))
+        return self.word_emb_proj(self.highway(concat))
+
+    def _reshape(self, x):
+        self.batch_size, L, C, D = x.shape
+        new_shape = (self.batch_size * L, C, D)
+        return torch.reshape(x, new_shape).transpose(1, 2)
+
+    def _deshape(self, x):
+        BL, D_SUM = x.shape
+        new_shape = (self.batch_size, int(BL / self.batch_size), D_SUM)
+        return x.reshape(new_shape)
 
 
 class Highway(nn.Module):
@@ -123,32 +161,57 @@ class Highway(nn.Module):
             x = proj * gate + x * (1.0 - gate)
 
         return x
-
-
+    
+ 
 class WordLSTM(nn.Module):
-    def __init__(self, d_emb_word, d_hidden, n_lstm_layers=2, dropout=0.5):
+    def __init__(self, d_emb_word, d_lstm, n_lstm_layers=2, dropout=0.5):
         super().__init__()
-        self.lstm_layers = nn.ModuleList([
-            nn.LSTM(input_size=d_emb_word,
-                    hidden_size=d_hidden,
-                    bidirectional=True,
-                    dropout=dropout,
-                    proj_size=d_emb_word)
-            for _ in range(n_lstm_layers)])
+        self.n_lstm_layers = n_lstm_layers
+        self.forw_lstm = nn.ModuleList([nn.LSTM(input_size=d_emb_word,
+                                                hidden_size=d_lstm,
+                                                proj_size=d_emb_word,
+                                                batch_first=True)
+                                        for _ in range(n_lstm_layers)])
+        self.back_lstm = nn.ModuleList([nn.LSTM(input_size=d_emb_word,
+                                                hidden_size=d_lstm,
+                                                proj_size=d_emb_word,
+                                                batch_first=True)
+                                        for _ in range(n_lstm_layers)])
+        self.forw_drop = nn.Dropout(dropout)
+        self.back_drop = nn.Dropout(dropout)
         
-    def forward(self, x, return_all_states=False):  
+    def forward(self, x, return_all_states=False):
         """ Forward pass of the multi-layered bilateral lstm module
             - Input has shape (batch_size, seq_len, d_emb_word)
-            - Output has shape (batch_size, seq_len, d_emb_word)
+            - If return_all_states == True:
+                output has shape (1+2L, batch_size, seq_len, d_emb_word)
+            - If return_all_states == False: (return only output of last layer)
+                output has shape (batch_size, seq_len, 2 * d_emb_word)
         """
         context_embeddings = [x]
-        for i, layer in enumerate(self.lstm_layers):
-            out, _ = layer(x)  # (h, c) default to zero at init if not provided
-            if i < len(self.lstm_layers) - 1:
-                x = out + x  # residual connection (?)
+        forw_x, back_x = x, x.flip(dims=(1,))
+        for l, (back, forw) in enumerate(zip(self.forw_lstm, self.back_lstm)):
+            forw_out, _ = forw(x)  # (batch_size, seq_len, d_emb_word)
+            back_out, _ = back(x)  # (batch_size, seq_len, d_emb_word)
+            context_embeddings.extend(
+                self._combine_forward_and_backward(forw_out, back_out))
+            if l < self.n_lstm_layers - 1:  # residual and dropout
+                forw_x = self.forw_drop(forw_out) + forw_x
+                back_x = self.back_drop(back_out) + back_x
             else:
-                x = out
-            context_embeddings.append(x)
-            
-        return context_embeddings if return_all_states else x
+                forw_x, back_x = forw_out, back_out
+        
+        if return_all_states:  # (1+2L, batch_size, seq_len, d_emb_word)
+            return torch.stack(context_embeddings, dim=0)
+        else:  # (batch_size, seq_len, 2 * d_emb_word)
+            return torch.cat(context_embeddings[-2:], dim=-1)
     
+    def _combine_forward_and_backward(self, forw_out, back_out):
+        """ Align lstm backward and forward hidden states for language modeling
+            - Both inputs have shape (batch_size, seq_len, d_emb_word)
+            - Both outputs have shape (batch_siez, seq_len, d_emb_word)
+        """
+        forw_out = forw_out.roll(shifts=(1,), dims=(1,))
+        back_out = back_out.roll(shifts=(1,), dims=(1,))
+        forw_out[:, 0, :] = 0; back_out[:, 0, :] = 0
+        return forw_out, back_out.flip(dims=(1,))

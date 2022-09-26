@@ -4,9 +4,9 @@
   model_used = 'elmo'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'word'  # 'word', 'subword', 'icd'
-  ngram_min_len = 0  # must be > 0; only used for ngram_mode == 'subword'
-  ngram_max_len = 0  # must be >= ngram_min_len; only used for ngram_mode == 'subword'
+  ngram_mode = 'subword'  # 'word', 'subword', 'icd'
+  ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
+  ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
@@ -22,9 +22,9 @@
   max_seq_len = 512
 
 [train]
-  optimizer = 'radam'  # adam, radam, adamw
-  scheduler = 'linear'  # 'noam', 'linear'
-  lr = 0.001  # learning rate after warmup
+  optimizer = 'adamw'  # adam, radam, adamw
+  scheduler = 'noam'  # 'noam', 'linear'
+  lr = 0.0005  # learning rate after warmup
   betas = [0.9, 0.998]  # momentum
   weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1
@@ -52,14 +52,16 @@
       '[UNK]' = 1
   
   [models.elmo]
-    task = 'bilm'
-    input_keys = ['sequence']
-    label_keys = ['sequence']
-    d_convs = [512, 512, 512, 512]
-    k_sizes = [2, 3, 4, 5]  # should be ngram_len lists?
+    task = 'lm'
+    input_keys = ['chars', 'words']
+    label_keys = ['words']
+    d_conv = [512, 512]
+    k_size = [2, 3]  # should be ngram_len lists?
     d_embed_char = 256
     d_embed_word = 256
+    d_lstm = 512
     n_lstm_layers = 2
+    add_words = true  # if true, add whole word embeddings to char embeddings
     dropout = 0.5
     [models.elmo.special_tokens]
       '[PAD]' = 0
@@ -87,7 +89,7 @@
       '[END]' = 4
 
   [models.bert]
-    task = 'reagent_pred_mlm'  # 'mlm', 'reagent_pred_mlm'
+    task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
     label_keys = ['masked', 'target']  # 'masked' present to get mask indices
     n_layers = 4

@@ -7,10 +7,11 @@ class Glove(nn.Module):
     """ Glove model
     """
 
-    def __init__(self, vocab_size, special_tokens, d_embed, *args, **kwargs):
+    def __init__(self, vocab_sizes, special_tokens, d_embed, *args, **kwargs):
         super().__init__()
         assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
         self.pad_id = special_tokens['[PAD]']
+        vocab_size = vocab_sizes['total']
         self.l_emb = nn.Embedding(vocab_size, d_embed)  # check padding idx parameter for ngram-glove
         self.l_bias = nn.Embedding(vocab_size, 1)
         self.r_emb = nn.Embedding(vocab_size, d_embed)

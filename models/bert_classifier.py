@@ -6,9 +6,9 @@ from .bert import BERT
 
 class BERTClassifier(nn.Module):
     """ BERTClassifier: Finetune BERT and classifier weights. """
-    def __init__(self, vocab_size, special_tokens, max_seq_len, d_embed, d_ff,
-                 n_layers, n_heads, n_classes, bert_ckpt_path, pos_weights,
-                 bert_grad_type, dropout=0.1, *args, **kwargs):
+    def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
+                 d_ff, n_layers, n_heads, n_classes, bert_ckpt_path,
+                 pos_weights, bert_grad_type, dropout=0.1, *args, **kwargs):
         """
         :param voc_size: vocabulary size of words given to the model
         :param pad_id: index of the padding token
@@ -19,7 +19,7 @@ class BERTClassifier(nn.Module):
         :param dropout: dropout rate in all layers and sublayers of BERT
         """
         super().__init__()
-        self.bert = BERT(vocab_size, special_tokens, max_seq_len, d_embed,
+        self.bert = BERT(vocab_sizes, special_tokens, max_seq_len, d_embed,
                          d_ff, n_layers, n_heads, dropout)
         
         if bert_ckpt_path is not None:
@@ -109,20 +109,42 @@ class BERTClassifier(nn.Module):
     
 
 class BertClassifierLoss(nn.Module):
-    def __init__(self, n_classes, pos_weights):
+    def __init__(self, n_classes, pos_weights, mode='bce'):
         super().__init__()
         self.n_classes = n_classes
         pos_weights = torch.tensor(pos_weights)
-        self.bce_logits_loss = nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+        if mode == 'bce':
+            self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+        elif mode == 'focal':
+            self.loss_fn = FocalLoss(weight=pos_weights)
+        else:
+            raise ValueError('Invalid loss mode given to bert classifier loss')
         
     def forward(self, model_output, label):
         one_hot_label = self.multi_label_one_hot(label)
         one_hot_label = one_hot_label.to(model_output.device).float()
-        return self.bce_logits_loss(model_output, one_hot_label)
+        return self.loss_fn(model_output, one_hot_label)
     
     def multi_label_one_hot(self, batch):
         return torch.stack(tuple(map(self.one_hot_tensor, batch)), dim=0)
     
     def one_hot_tensor(self, sample):
         return F.one_hot(torch.tensor(sample), self.n_classes).sum(dim=0)
+
+
+class FocalLoss(nn.modules.loss._WeightedLoss):
+    def __init__(self, weight=None, gamma=2, reduction='mean'):
+        super(FocalLoss, self).__init__(weight, reduction=reduction)
+        # weight parameter acts as the alpha parameter to balance class weights
+        self.weight = weight
+        self.gamma = gamma
+        
+    def forward(self, input, target):
+        ce_loss = F.cross_entropy(input,
+                                  target,
+                                  reduction=self.reduction,
+                                  weight=self.weight)
+        pt = torch.exp(-ce_loss)
+        focal_loss = ((1 - pt) ** self.gamma * ce_loss).mean()
+        return focal_loss
     

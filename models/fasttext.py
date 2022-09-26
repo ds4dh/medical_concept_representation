@@ -2,10 +2,11 @@ import torch.nn as nn
 
 
 class FastText(nn.Module): 
-    def __init__(self, vocab_size, d_embed, special_tokens, *args, **kwargs):
+    def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
         super().__init__()
         assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
         self.pad_id = special_tokens['[PAD]']
+        vocab_size = vocab_sizes['total']
         self.embed = nn.Embedding(vocab_size, d_embed)
         self.fc = nn.Linear(d_embed, vocab_size)
         self.loss_fn = FastTextLoss()

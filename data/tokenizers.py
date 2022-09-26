@@ -18,24 +18,29 @@ class Tokenizer():
         assert isinstance(words, list)
         
         # Compute and sort vocabulary
-        unique_words, word_counts = np.unique(words, return_counts=True)
+        word_vocab, word_counts = np.unique(words, return_counts=True)
         if self.min_freq > 0:  # remove rare words
-            unique_words = unique_words[word_counts > self.min_freq]
+            word_vocab = word_vocab[word_counts > self.min_freq]
             word_counts = word_counts[word_counts > self.min_freq]
         inds = word_counts.argsort()[::-1]
-        unique_words = unique_words[inds]
+        word_vocab = word_vocab[inds]
 
         # Generate word level encoder
         self.encoder.update({i: (idx + len(self.special_tokens))
-                             for idx, i in enumerate(unique_words)})
+                             for idx, i in enumerate(word_vocab)})
                 
         # Store word count for every word (useful for skipgram dataset)
         self.word_counts = {self.encoder[word]: count for word, count in \
-                            zip(unique_words, sorted(word_counts)[::-1])}
+                            zip(word_vocab, sorted(word_counts)[::-1])}
 
         # Decoder
         self.decoder = {v: k for k, v in self.encoder.items()}
-
+        
+        # Store useful parameters of the tokenizer
+        self.vocab_sizes = {'total': len(self.encoder),
+                            'special': len(self.special_tokens),
+                            'word': len(word_vocab)}
+        
     def encode(self, word):
         try:
             return self.encoder[word]
@@ -44,10 +49,6 @@ class Tokenizer():
     
     def decode(self, token_id):
         return self.decoder[token_id]
-
-
-# IDEA: USE A SPECIFIC TOKENIZATION SCHEME THAT TAKES INTO ACCOUNT THE SCRUCTURE OF ICD (OR OTHER) CODES
-# [XX-16-AV] -> [[X] [XX] [XX-1] [XX-16] [XX-16-A] [XX-16-AV]]
 
 
 class SubWordTokenizer():
@@ -73,27 +74,34 @@ class SubWordTokenizer():
             ngrams suited to icd codes (forward-only ngrams))
     
     """
-    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode, special_tokens,
-                 min_freq=0, brackets=['<', '>']):
+    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode,
+                 special_tokens, min_freq=0, brackets=['<', '>']):
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
-        assert ngram_min_len <= ngram_max_len
-        assert ngram_min_len >= 0
-        assert ngram_max_len >= 0
+        assert ngram_min_len >= 0 and ngram_max_len >= ngram_min_len
         self.ngram_len = list(range(ngram_min_len, ngram_max_len + 1))
         self.min_freq = min_freq
         self.brackets = brackets
         self.forbidden_ngrams = brackets + list(special_tokens.keys())
         self.ngram_mode = ngram_mode
+        self.ngram_fn = self._select_ngram_fn(ngram_mode)
+        
+    def _select_ngram_fn(self, ngram_mode):
+        if ngram_mode == 'subword':
+            return self._generate_multi_ngrams
+        elif ngram_mode == 'icd':
+            return self._generate_icd_ngrams
+        else:
+            raise ValueError('Unknown ngramization mode %s' % self.ngram_mode)
 
     @staticmethod
     def _flatten(t):
         return [item for sublist in t for item in sublist]
 
     @staticmethod
-    def _generate_ngrams(word, length, forbidden_ngram):
-        return [ngram for ngram in ["".join(i) for i in ngrams(word, length)]
-                if (ngram not in forbidden_ngram) and (word[1:-1] not in ngram)]
+    def _generate_ngrams(word, n, forbidden_ngram):
+        return [ngram for ngram in ["".join(i) for i in ngrams(word, n)]
+                if (ngram not in forbidden_ngram)]  # and (word[1:-1] not in ngram)]
     
     @staticmethod
     def _generate_icd_ngrams(txt):
@@ -106,73 +114,76 @@ class SubWordTokenizer():
     
     def _add_brackets(self, word):
         return self.brackets[0] + word + self.brackets[1]
+    
+    def _compute_and_sort_vocabulary(self, words_or_ngrams):
+        vocab, counts = np.unique(words_or_ngrams, return_counts=True)
+        if self.min_freq > 0:  # remove rare words
+            vocab = vocab[counts > self.min_freq]
+            counts = counts[counts > self.min_freq]
+        inds = counts.argsort()[::-1]  # most occurent first
+        return vocab[inds], counts[inds]
         
     def fit(self, words):
         print('Training tokenizer')
         assert isinstance(words, list)
         
-        # Compute and sort vocabulary
-        unique_words, word_counts = np.unique(words, return_counts=True)
-        if self.min_freq > 0:  # remove rare words
-            unique_words = unique_words[word_counts > self.min_freq]
-            word_counts = word_counts[word_counts > self.min_freq]
-        inds = word_counts.argsort()[::-1]  # most occurent first
-        unique_words = unique_words[inds]
-
-        # Compute ngram vocabulary
-        if self.ngram_mode == 'subword':
-            unique_whole_words = [self._add_brackets(w) for w in unique_words]
-            unique_ngrams = self._flatten([self._generate_multi_ngrams(word)
-                                           for word in unique_whole_words])
-        elif self.ngram_mode == 'icd':
-            unique_whole_words = unique_words
-            unique_ngrams = self._flatten([self._generate_icd_ngrams(word)
-                                           for word in unique_whole_words])
-        else:
-            raise ValueError('Unknown ngramization mode %s' % self.ngram_mode)
-
-        # Sort ngram vocabulary
-        unique_ngrams, ngram_counts = np.unique(
-            unique_ngrams, return_counts=True)
-        inds = ngram_counts.argsort()[::-1]
-        unique_ngrams = unique_ngrams[inds]
-
-        # Generate word level encoder
-        self.encoder.update({word: (i + len(self.special_tokens))
-                            for i, word in enumerate(unique_whole_words)})
-
-        # Store word count for every word (useful for skipgram dataset)
-        self.n_words = len(self.encoder)  # might be useful for elmo (let's see)
+        # Compute and sort word and ngram vocabularies
+        word_vocab, word_counts = self._compute_and_sort_vocabulary(words)
+        if self.ngram_mode != 'icd':  # differentiate whole words from ngrams
+            word_vocab = [self._add_brackets(w) for w in word_vocab]
+        ngrams = self._flatten([self.ngram_fn(word) for word in word_vocab])
+        ngram_vocab, _ = self._compute_and_sort_vocabulary(ngrams)
+        
+        # Populate word level encoder (if not in char mode)
+        len_so_far = len(self.encoder)
+        self.encoder.update({word: (idx + len_so_far)
+                             for idx, word in enumerate(word_vocab)})
+            
+        # Store word count for every word (if not in char mode)
         self.word_counts = {self.encoder[word]: count for word, count in \
-                            zip(unique_whole_words, sorted(word_counts)[::-1])}
+                            zip(word_vocab, sorted(word_counts)[::-1])}
 
         # Update encoder with ngram level vocabulary
-        self.encoder.update({i: (idx + self.n_words)
-                            for idx, i in enumerate(unique_ngrams)})
+        len_so_far = len(self.encoder)
+        self.encoder.update({i: (idx + len_so_far)
+                             for idx, i in enumerate(ngram_vocab)})
 
         # Decoder
-        self.decoder = {v: k if k in self.special_tokens else k[1:-1]
+        self.decoder = {v: k if k not in word_vocab else k[1:-1]
                         for k, v in self.encoder.items()}
 
+        # Store useful parameters of the tokenizer
+        self.vocab_sizes = {'total': len(self.encoder),
+                            'special': len(self.special_tokens),
+                            'word': len(word_vocab),
+                            'ngram': len(ngram_vocab)}
+        
     def encode(self, word):
-        # Generate n-grams and add them to the word
-        if word not in self.special_tokens:
-            bracket_word = self._add_brackets(word)
-            seq = [bracket_word] + self._generate_multi_ngrams(bracket_word)
-        else:
+        # Generate n-grams and add them to the word (if not in char mode)
+        seq = []
+        if word in self.special_tokens:
             seq = [word]
-
-        # Encode the word and the ngram.
+        elif self.ngram_mode == 'subword':
+            seq = [self._add_brackets(word)] + self.ngram_fn(word)
+        elif self.ngram_mode == 'icd':
+            seq = [word] + self.ngram_fn(word)
+            
+        # Encode the word and the ngram
         indices = []
         for word_or_ngram in seq:  # first in the list is the word itself
             try:
                 indices.append(self.encoder[word_or_ngram])
             except:  # this will still take the ngrams for an unknown word
                 indices.append(self.encoder['[UNK]'])
-                
         return indices
 
     def decode(self, token_id_or_ids):
+        """ Decode a token or a list of tokens.
+            - If the input is a list of tokens, this means that the first token
+                correspond to the word and the subsequent ones correspond to
+                the subword.
+            - In this case, the tokenizer only returns the decoded word.    
+        """
         if type(token_id_or_ids) == list:
             return self.decoder[token_id_or_ids[0]]
         elif type(token_id_or_ids) == int:

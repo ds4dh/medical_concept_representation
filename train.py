@@ -29,7 +29,7 @@ class PytorchLightningWrapper(pl.LightningModule):
                                           model_params)
         
         # Update model parameters and load model
-        model_params['vocab_size'] = len(self.pipeline.tokenizer.encoder)
+        model_params['vocab_sizes'] = self.pipeline.tokenizer.vocab_sizes
         model_params['max_seq_len'] = data_params['max_seq_len']
         self.model = model(**model_params)
         

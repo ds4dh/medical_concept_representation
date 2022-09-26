@@ -7,8 +7,8 @@ import math
 
 class BERT(nn.Module):
     """ BERT: Bidirectional Encoder Representations from Transformers. """
-    def __init__(self, vocab_size, special_tokens, max_seq_len, d_embed, d_ff,
-                 n_layers, n_heads, dropout=0.1, *args, **kwargs):
+    def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
+                 d_ff, n_layers, n_heads, dropout=0.1, *args, **kwargs):
         """
         :param voc_size: voc_size of total words
         :param pad_id: index of the padding token
@@ -28,6 +28,7 @@ class BERT(nn.Module):
         self.loss_fn = BertLoss(mask_id=self.mask_id)
 
         # Sum of positional, segment and token embeddings
+        vocab_size = vocab_sizes['total']
         self.embedding = BERTEmbedding(vocab_size=vocab_size,
                                        max_len=max_seq_len,
                                        d_embed=d_embed,
@@ -108,7 +109,6 @@ class TransformerBlock(nn.Module):
 
 
 class MultiHeadedAttention(nn.Module):
-    """ Take in number of heads and model hidden size. """
     def __init__(self, n_heads, d_embed, dropout=0.1):
         super().__init__()
         assert d_embed % n_heads == 0
@@ -246,7 +246,6 @@ class TokenEmbedding(nn.Embedding):
 
 
 class PositionalEmbedding(nn.Module):
-
     def __init__(self, d_embed, max_len):
         super().__init__()
         pe = torch.zeros(max_len, d_embed).float()

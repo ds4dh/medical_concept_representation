@@ -30,12 +30,14 @@ def load_model_and_params_from_config(config_path):
     train_params = config['train']
     
     # Check ngram length and set unique model name for logs directory
-    assert run_params['ngram_min_len'] <= run_params['ngram_max_len'] and \
-           run_params['ngram_min_len'] >= 0 and \
-           run_params['ngram_max_len'] >= 0, \
-        'Invalid ngram min and max length (max < min or any < 0).'
-    ngram_str = 'ngram-min%s-max%s' % (run_params['ngram_min_len'],
-                                       run_params['ngram_max_len'])
+    if run_params['ngram_mode'] == 'subword':
+        assert (run_params['ngram_min_len'] > 0 and \
+                run_params['ngram_max_len'] >= run_params['ngram_min_len']), \
+                'Invalid ngram min and max length (must have max > min > 0).'
+        ngram_str = 'ngram-min%s-max%s' % (run_params['ngram_min_len'],
+                                        run_params['ngram_max_len'])
+    else:
+        ngram_str = 'ngram-%s' % run_params['ngram_mode']
     model_used = run_params['model_used']
     model_name = '_'.join([model_used, ngram_str])
     
@@ -50,6 +52,8 @@ def load_model_and_params_from_config(config_path):
     if model_used == 'bert_classifier':
         update_class_info(data_params, model_params)
         update_bert_params(config, model_name, model_params)
+    
+    # Send the model and all parameterss to the main script
     return model, run_params, data_params, train_params, model_params
 
 

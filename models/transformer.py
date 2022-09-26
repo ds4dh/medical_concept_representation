@@ -7,7 +7,7 @@ import torch.nn.functional as F
 class Transformer(nn.Module):
     def __init__(self,
                  n_enc_layers, n_dec_layers, d_embed, d_ff, n_heads, dropout,
-                 max_seq_len, special_tokens, vocab_size, share_embeddings=True,
+                 max_seq_len, special_tokens, vocab_sizes, share_embeddings,
                  *args, **kwargs):
         ''' Initialize a Transformer model for seq to seq translation,
             using as much as possible the torch.nn transformer modules.
@@ -43,13 +43,11 @@ class Transformer(nn.Module):
         pad_id = special_tokens['[PAD]']
         self.pad_id = pad_id
         if share_embeddings:
-            assert isinstance(vocab_size, int)
-            src_vocab_size, tgt_vocab_size = vocab_size, vocab_size
-        else:
-            # Note: not implemented in the pipeline yet
-            assert isinstance(vocab_size, dict)
-            src_vocab_size = vocab_size['src']
-            tgt_vocab_size = vocab_size['tgt']
+            src_vocab_size = vocab_sizes['total']
+            tgt_vocab_size = vocab_sizes['total']
+        else:  # Note: not implemented in the pipeline yet
+            src_vocab_size = vocab_sizes['src_total']
+            tgt_vocab_size = vocab_sizes['tgt_total']
         
         # Token and position embeddings
         self.src_embedding = TokenEmbedding(src_vocab_size, d_embed, pad_id)
