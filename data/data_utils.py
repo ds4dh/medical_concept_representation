@@ -209,6 +209,7 @@ class TorchPadder(IterDataPipe):
     def __iter__(self):
         for batch in self.dp:
             if isinstance(batch, dict):
+                import pdb; pdb.set_trace()
                 yield {key: batch[key] if 'label' in key  # labels untouched
                        else torch.tensor(self.pad_fn(batch[key]))
                        for key in batch.keys()}

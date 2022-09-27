@@ -1,7 +1,7 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo',
   #                  'bert', 'bert_classifier', 'transformer'
-  model_used = 'elmo'
+  model_used = 'bert'
   model_version = 0
   exp_id = 'test'
   ngram_mode = 'subword'  # 'word', 'subword', 'icd'
@@ -91,7 +91,7 @@
   [models.bert]
     task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
-    label_keys = ['masked', 'target']  # 'masked' present to get mask indices
+    label_keys = ['masked_label', 'masked_label_ids']
     n_layers = 4
     d_embed = 256
     d_ff = 2048

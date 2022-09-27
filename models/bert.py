@@ -75,12 +75,9 @@ class BertLoss(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, masked, target):
+    def forward(self, model_output, masked_label_ids, masked_label):
         logits = self.log_softmax(model_output)
-        if len(masked.shape) > 2:  # ngram case
-            masked = masked[:, :, 0]
-        mask_locations = torch.where(masked == self.mask_id)
-        return self.nlll_loss(logits[mask_locations], target[mask_locations])
+        return self.nlll_loss(logits[masked_label_ids], masked_label)
 
 
 class TransformerBlock(nn.Module):
