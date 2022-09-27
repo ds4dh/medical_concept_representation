@@ -25,7 +25,7 @@ class BERT(nn.Module):
         self.n_layers = n_layers
         self.n_heads = n_heads
         self.d_ff = d_ff
-        self.loss_fn = BertLoss(mask_id=self.mask_id)
+        self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
 
         # Sum of positional, segment and token embeddings
         vocab_size = vocab_sizes['total']
@@ -69,15 +69,30 @@ class BERT(nn.Module):
         
 
 class BertLoss(nn.Module):
-    def __init__(self, mask_id):
+    def __init__(self, mask_id, max_seq_len):
         super().__init__()
         self.mask_id = mask_id
+        self.max_seq_len = max_seq_len
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
     def forward(self, model_output, masked_label_ids, masked_label):
-        logits = self.log_softmax(model_output)
-        return self.nlll_loss(logits[masked_label_ids], masked_label)
+        """ Forward pass of the loss for bert, i.e., the cross-entropy between
+            model token prediction for masked token and their true values    
+        """
+        # Retrieve indexes of masked tokens and their values
+        seq_len = model_output.shape[1]
+        msk_ids, msk_lbls = [], []
+        for i, (ids, lbls) in enumerate(zip(masked_label_ids, masked_label)):
+            for id, lbl in zip(ids, lbls):
+                if id < self.max_seq_len:
+                    msk_ids.append(id + i * seq_len); msk_lbls.append(lbl)
+        
+        # Select the corresponding model predictions and compute loss
+        model_output = model_output.view(-1, model_output.shape[-1])
+        prediction = self.log_softmax(model_output[msk_ids])
+        target = torch.tensor(msk_lbls, device=prediction.device)
+        return self.nlll_loss(prediction, target)
 
 
 class TransformerBlock(nn.Module):

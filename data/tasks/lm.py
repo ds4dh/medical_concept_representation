@@ -40,7 +40,7 @@ class ElmoSetter(IterDataPipe):
             self.eos_id_char = tokenizer.encode('[END]')
             self.bos_id_word = self.bos_id_char[0]
             self.eos_id_word = self.eos_id_char[0]
-        except TypeError:
+        except TypeError:  # for words only elmo (control model)
             self.elmo_set_fn = self.elmo_set_fn_for_words_only
             self.bos_id_word = tokenizer.encode('[CLS]')
             self.eos_id_word = tokenizer.encode('[END]')

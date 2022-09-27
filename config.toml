@@ -4,7 +4,7 @@
   model_used = 'bert'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'subword'  # 'word', 'subword', 'icd'
+  ngram_mode = 'word'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   debug = true
