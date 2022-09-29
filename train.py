@@ -170,7 +170,7 @@ def main():
     
     # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    trainer.test(ckpt_path='last')
+    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
 
 
 if __name__ == '__main__':
