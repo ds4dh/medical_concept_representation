@@ -18,10 +18,10 @@ The NLP models we use are GloVe, FastText, ELMO and BERT. Model trainings are ca
 #### (1) Flexible data pipeline (Dimitris + Alban)
 Build a pipeline that can generate a dataset with any feature. The feature choice is a vector of boolean values.
 
-#### Genetic algorithm for feature selection (Anthony)
+#### (2) Genetic algorithm for feature selection (Anthony)
 Build a genetic algorithm that sends a boolean vector request to the dataset pipeline, and then performs diagnose prediction with tf-idf. The goal is to identify the set of features that yield the best performance for the other models, as well as to set a baseline performance for model comparison.
 
 ### Models
 
-#### Test metric (Alban)
+#### (3) Test metric (Alban)
 For each model, code a test metric function that extracts embeddings from the test set (using input without diagnoses) and performs diagnose prediction using the minimal cosine distance.
