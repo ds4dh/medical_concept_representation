@@ -6,73 +6,16 @@ import math
 
 
 class BERT(nn.Module):
-    """ BERT: Bidirectional Encoder Representations from Transformers. """
     def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
-                 d_ff, n_layers, n_heads, dropout=0.1, *args, **kwargs):
-        """
-        :param voc_size: voc_size of total words
-        :param pad_id: index of the padding token
-        :param d_embed: BERT model hidden size
-        :param n_layers: numbers of Transformer blocks(layers)
-        :param n_heads: number of attention heads
-        :param dropout: dropout rate
-        """
+                 d_ff, n_layers, attn_type, dropout=0.1, n_heads=None,
+                 *args, **kwargs):
         super().__init__()
+        assert not (attn_type == 'attention' and n_heads is None)
         self.mask_id = special_tokens['[MASK]']
         self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
 
-        # Sum of positional, segment and token embeddings
-        vocab_size = vocab_sizes['total']
-        self.embedding = BERTEmbedding(vocab_size=vocab_size,
-                                       max_len=max_seq_len,
-                                       d_embed=d_embed,
-                                       pad_id=special_tokens['[PAD]'])
-
-        # Multi-layers transformer blocks, deep network
-        self.transformer_blocks = nn.ModuleList(
-            [TransformerBlock(d_embed, n_heads, d_ff, dropout) \
-                for _ in range(n_layers)])
-
-        # Final projection to predict words for each masked token
-        self.final_proj = nn.Linear(d_embed, vocab_size)
-
-    def forward(self, masked, segment_labels=None, get_embeddings_only=False):
-        # Adapt the size of what is used to build the masks
-        input_for_masks = masked
-        if len(input_for_masks.shape) > 2:  # ngram case
-            input_for_masks = input_for_masks[:, :, 0]
-        
-        # Attention mask for padded token (batch_size, 1, seq_len, seq_len)
-        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1) \
-                    .repeat(1, masked.size(1), 1).unsqueeze(1)
-
-        # Embed token_id sequences to vector sequences
-        if segment_labels == None:
-            segment_labels = torch.ones_like(input_for_masks, dtype=torch.int)
-        x = self.embedding(masked, segment_labels)
-
-        # Run through all transformer blocks
-        for transformer in self.transformer_blocks:
-            x = transformer.forward(x, pad_mask)
-        
-        # Returns embeddings or word projections
-        if get_embeddings_only:
-            return x
-        else:
-            return self.final_proj(x)
-
-
-class BERT(nn.Module):
-    def __init__(self, special_tokens, vocab_sizes, max_seq_len, n_layers,
-                 d_embed, d_ff, attn_type, dropout=0.1, n_heads=None):
-        super().__init__()
-        self.attn_type = attn_type
-        self.mask_id = special_tokens['[MASK]']
-        self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
-
-        # Sum of positional, segment and token embeddings
-        vocab_size = vocab_sizes['total']
-        self.embedding = BERTEmbedding(vocab_size=vocab_size,
+        # Embedding layer (sum of positional, segment and token embeddings)
+        self.embedding = BERTEmbedding(vocab_size=vocab_sizes['total'],
                                        max_len=max_seq_len,
                                        d_embed=d_embed,
                                        pad_id=special_tokens['[PAD]'])
@@ -89,27 +32,30 @@ class BERT(nn.Module):
                 PreNorm(d_embed, FeedForward(d_embed, d_ff, dropout))]))
         
         # Final projection to predict words for each masked token
-        self.final_proj = nn.Linear(d_embed, vocab_size)
+        self.final_proj = nn.Linear(d_embed, vocab_sizes['total'])
 
-    def forward(self, masked):
-        # Adapt the size of what is used to build the masks
+    def forward(self, masked, segment_labels=None, get_embeddings=False):
+        # Embed token sequences to vector sequences
+        pad_mask = self.create_pad_mask(masked)
+        x = self.embedding(masked, segment_labels)
+
+        # Run through all BERT layers (with intermediate residual connection)
+        for attn, ff in self.layers:
+            x = attn(x, pad_mask) + x
+            x = ff(x) + x
+        
+        # Return embeddings or word projections
+        return x if get_embeddings else self.final_proj(x)
+
+    def create_pad_mask(self, masked):
+        # Adapt the size of the array used to build the masks
         input_for_masks = masked
         if len(input_for_masks.shape) > 2:  # ngram case
             input_for_masks = input_for_masks[:, :, 0]
         
         # Attention mask for padded token (batch_size, 1, seq_len, seq_len)
-        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1) \
-                    .repeat(1, masked.size(1), 1).unsqueeze(1)
-
-        # Embed token_id sequences to vector sequences
-        if segment_labels == None:
-            segment_labels = torch.ones_like(input_for_masks, dtype=torch.int)
-        x = self.embedding(masked, segment_labels)
-
-        for attn, ff in self.layers:
-            x = attn(x, pad_mask) + x
-            x = ff(x) + x
-        return x
+        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1)
+        return pad_mask.repeat(1, masked.size(1), 1).unsqueeze(1)
 
 
 class BertLoss(nn.Module):
@@ -150,7 +96,7 @@ class PreNorm(nn.Module):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
-        
+
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
 
@@ -211,6 +157,13 @@ class BERTEmbedding(nn.Module):
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, sequence, segment_labels):
+        # Create an idle segment mask if none is used
+        if segment_labels == None:
+            sequence_for_lbls = sequence
+            if len(sequence_for_lbls.shape) > 2:  # ngram case
+                sequence_for_lbls = sequence_for_lbls[:, :, 0]
+            segment_labels = torch.ones_like(sequence_for_lbls, dtype=torch.int)
+
         # For token_embeddings, sum over ngram dimension if existing
         tok_embeddings = self.tok(sequence)
         if len(tok_embeddings.shape) > 3:
