@@ -16,7 +16,7 @@
 
 [data]
   data_dir = './data/datasets/autophe'
-  data_subdir = 'time_categorized'
+  data_subdir = 'time_categorized'  # time_categorized, time_not_categorized
   # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
   # data_subdir = 'smiles'
   log_dir = './logs'
@@ -28,10 +28,10 @@
   lr = 0.001  # learning rate after warmup  # set to smaller for bert_classifier!
   betas = [0.9, 0.998]  # momentum
   weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
-  accumulate_grad_batches = 4
+  accumulate_grad_batches = 1
   max_tokens_per_batch = 4096
-  n_steps = 500000
-  n_warmup_steps = 10000
+  n_steps = 10000
+  n_warmup_steps = 1000
 
 [models]
   [models.fasttext]

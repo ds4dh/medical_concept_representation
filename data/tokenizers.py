@@ -119,7 +119,6 @@ class SubWordTokenizer():
         word, ngrams = self._initialize_ngrams(word)
         ngrams.extend(self._flatten([self._generate_ngrams(
             word, i, self.forbidden_ngrams) for i in self.ngram_len]))
-        import pdb; pdb.set_trace()
         return ngrams
     
     def _add_brackets(self, word):

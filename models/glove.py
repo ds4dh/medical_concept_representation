@@ -10,12 +10,12 @@ class Glove(nn.Module):
     def __init__(self, vocab_sizes, special_tokens, d_embed, *args, **kwargs):
         super().__init__()
         assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
-        self.pad_id = special_tokens['[PAD]']
+        pad_id = special_tokens['[PAD]']
         vocab_size = vocab_sizes['total']
-        self.l_emb = nn.Embedding(vocab_size, d_embed)  # check padding idx parameter for ngram-glove
-        self.l_bias = nn.Embedding(vocab_size, 1)
-        self.r_emb = nn.Embedding(vocab_size, d_embed)
-        self.r_bias = nn.Embedding(vocab_size, 1)
+        self.l_emb = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
+        self.l_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
+        self.r_emb = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
+        self.r_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
         self.loss_fn = GloveLoss(reduce='mean')  # 'sum' for original behaviour
 
     def forward(self, left, right):
@@ -41,18 +41,17 @@ class Glove(nn.Module):
         else:
             return x.sum(dim=dim)
         
-    def get_embeddings(self):
-        left, right = self.l_emb.weight.detach().cpu().numpy(), \
-                      self.r_emb.weight.detach().cpu().numpy()
-        return {"left": left, "right": right, "embeddings": left + right}
-
-    def export_as_gensim(self, path, tokenizer):
-        left, right, embeddings = self.get_embeddings().values()
-        with open(path, 'w', encoding='utf-8') as f:
-            for tok, emb in zip(tokenizer.encoder.keys(), embeddings.tolist()):
-                f.write(str(tok) + ' ' + str(emb).replace('[', '') \
-                                                 .replace(']', '') \
-                                                 .replace(',', '') + '\n')
+    def get_embeddings(self, token_indices):
+        token_embeddings = []
+        for token_index in token_indices:
+            token_index = torch.tensor(token_index).unsqueeze(dim=0)
+            as_left = self.l_emb(token_index)
+            as_right = self.l_emb(token_index)
+            if len(as_left.shape) > 2:  # ngram case
+                as_left = self.combine_ngram_embeddings(as_left, dim=-2)
+                as_right = self.combine_ngram_embeddings(as_right, dim=-2)
+            token_embeddings.append(as_left + as_right)
+        return torch.cat(token_embeddings, dim=0).detach().numpy()
 
 
 class GloveLoss(nn.Module):

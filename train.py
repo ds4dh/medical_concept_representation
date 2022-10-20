@@ -1,6 +1,7 @@
 import argparse
 import models
 import data
+import data.metrics as metrics
 import pytorch_lightning as pl
 import train_utils
 from torch.utils.data import DataLoader
@@ -36,6 +37,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Some useful parameters for the run
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
+        
+        # THIS IS JUST TO TEST MY METRICS WITHOUT TRAINING A MODEL, WILL REMOVE
+        # metrics.draw_embedding_scatterplots(self.model, self.pipeline.tokenizer)
+        # exit()
         
     def step(self, batch, batch_idx, mode):
         """ Proceed forward pass of the mode ('train' or 'val'), compute loss
@@ -86,8 +91,9 @@ class PytorchLightningWrapper(pl.LightningModule):
         """
         return self.step(batch, batch_idx, 'test')
 
-    # def test_epoch_end(output):
-    #     model.export_as_gensim(output)
+    def test_epoch_end(self, output):
+        # model.export_as_gensim(output)
+        metrics.draw_embedding_scatterplots(self.model, self.pipeline.tokenizer)
 
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader
@@ -160,6 +166,7 @@ def main():
     trainer = pl.Trainer(default_root_dir=log_dir,
                          accelerator=accelerator,
                          devices=devices,
+                         num_sanity_val_steps=0,
                          accumulate_grad_batches= \
                             train_params['accumulate_grad_batches'],
                          gradient_clip_val=0.0,
