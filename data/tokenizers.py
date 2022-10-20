@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
 from nltk.util import ngrams as ngram_base_fn
 
 
@@ -102,13 +100,13 @@ class SubWordTokenizer():
 
     @staticmethod
     def _generate_ngrams(word, n, forbidden_ngram):
-        return [ngram for ngram in ["".join(i) for i in ngram_base_fn(word, n)]
+        return [ngram for ngram in [''.join(i) for i in ngram_base_fn(word, n)]
                 if (ngram not in forbidden_ngram)]  # and (word[1:-1] not in ngram)]
     
     def _initialize_ngrams(self, word):
         for basic_token in self.ngram_base_voc:
             if basic_token in word:
-                return word.split(basic_token)[-1], [basic_token]
+                return word.replace(basic_token, ''), [basic_token]
         return word, []
     
     def _generate_icd_ngrams(self, word):
@@ -118,9 +116,11 @@ class SubWordTokenizer():
         return ngrams
 
     def _generate_multi_ngrams(self, word):
-        # word, ngrams = self._initialize_ngrams(word)
-        return self._flatten([self._generate_ngrams(
-            word, i, self.forbidden_ngrams) for i in self.ngram_len])
+        word, ngrams = self._initialize_ngrams(word)
+        ngrams.extend(self._flatten([self._generate_ngrams(
+            word, i, self.forbidden_ngrams) for i in self.ngram_len]))
+        import pdb; pdb.set_trace()
+        return ngrams
     
     def _add_brackets(self, word):
         return self.brackets[0] + word + self.brackets[1]
@@ -200,20 +200,4 @@ class SubWordTokenizer():
             return self.decoder[token_id_or_ids]
         else:
             raise TypeError('Invalid token format: %s' % type(token_id_or_ids))
-
-
-# TODO: put this at a better place (data_utils?)
-def display_pca_scatterplot(model, words=None, sample=0):
-    if words == None:
-        if sample > 0:
-            words = np.random.choice(list(model.key_to_index), sample)
-        else:
-            words = [word for word in model.vocab]
-
-    word_vectors = np.array([model[w] for w in words])
-    twodim = PCA().fit_transform(word_vectors)[:, :2]
-
-    plt.figure(figsize=(6, 6))
-    plt.scatter(twodim[:, 0], twodim[:, 1], edgecolors='k', c='r')
-    for word, (x, y) in zip(words, twodim):
-        plt.text(x+0.05, y+0.05, word)
+        

@@ -1,13 +1,13 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo',
   #                  'bert', 'bert_classifier', 'transformer'
-  model_used = 'bert'
-  model_version = 2
+  model_used = 'glove'
+  model_version = 0
   exp_id = 'test'
-  ngram_mode = 'word'  # 'word', 'subword', 'icd'
+  ngram_mode = 'subword'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
-  ngram_base_voc = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode == 'icd'
+  ngram_base_voc = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
   debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
@@ -16,7 +16,7 @@
 
 [data]
   data_dir = './data/datasets/autophe'
-  data_subdir = 'time_not_categorized'
+  data_subdir = 'time_categorized'
   # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
   # data_subdir = 'smiles'
   log_dir = './logs'
