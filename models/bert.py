@@ -1,4 +1,4 @@
-# Taken from https://github.com/codertimo/BERT-pytorch
+# Some parts taken from https://github.com/rishikksh20/FNet-pytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,67 +6,57 @@ import math
 
 
 class BERT(nn.Module):
-    """ BERT: Bidirectional Encoder Representations from Transformers. """
     def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
-                 d_ff, n_layers, n_heads, dropout=0.1, *args, **kwargs):
-        """
-        :param voc_size: voc_size of total words
-        :param pad_id: index of the padding token
-        :param d_embed: BERT model hidden size
-        :param n_layers: numbers of Transformer blocks(layers)
-        :param n_heads: number of attention heads
-        :param dropout: dropout rate
-        """
+                 d_ff, n_layers, attn_type, dropout=0.1, n_heads=None,
+                 *args, **kwargs):
         super().__init__()
-        assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
-        self.pad_id = special_tokens['[PAD]']
+        assert not (attn_type == 'attention' and n_heads is None)
         self.mask_id = special_tokens['[MASK]']
-        self.d_embed = d_embed
-        self.n_layers = n_layers
-        self.n_heads = n_heads
-        self.d_ff = d_ff
         self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
 
-        # Sum of positional, segment and token embeddings
-        vocab_size = vocab_sizes['total']
-        self.embedding = BERTEmbedding(vocab_size=vocab_size,
+        # Embedding layer (sum of positional, segment and token embeddings)
+        self.embedding = BERTEmbedding(vocab_size=vocab_sizes['total'],
                                        max_len=max_seq_len,
                                        d_embed=d_embed,
-                                       pad_id=self.pad_id)
-
-        # Multi-layers transformer blocks, deep network
-        self.transformer_blocks = nn.ModuleList(
-            [TransformerBlock(d_embed, n_heads, d_ff, dropout) \
-                for _ in range(n_layers)])
-
+                                       pad_id=special_tokens['[PAD]'])
+        
+        # BERT layers
+        self.layers = nn.ModuleList([])
+        for l in range(n_layers):
+            if attn_type == 'fourier' and l < n_layers - 2:
+                attn_module = FourierNet()
+            else:
+                attn_module = MultiHeadedAttention(n_heads, d_embed, dropout)
+            self.layers.append(nn.ModuleList([
+                PreNorm(d_embed, attn_module),
+                PreNorm(d_embed, FeedForward(d_embed, d_ff, dropout))]))
+        
         # Final projection to predict words for each masked token
-        self.final_proj = nn.Linear(d_embed, vocab_size)
+        self.final_proj = nn.Linear(d_embed, vocab_sizes['total'])
 
-    def forward(self, masked, segment_labels=None, get_embeddings_only=False):
-        # Adapt the size of what is used to build the masks
+    def forward(self, masked, segment_labels=None, get_embeddings=False):
+        # Embed token sequences to vector sequences
+        pad_mask = self.create_pad_mask(masked)
+        x = self.embedding(masked, segment_labels)
+
+        # Run through all BERT layers (with intermediate residual connection)
+        for attn, ff in self.layers:
+            x = attn(x, mask=pad_mask) + x
+            x = ff(x) + x
+        
+        # Return embeddings or word projections
+        return x if get_embeddings else self.final_proj(x)
+
+    def create_pad_mask(self, masked):
+        # Adapt the size of the array used to build the masks
         input_for_masks = masked
         if len(input_for_masks.shape) > 2:  # ngram case
             input_for_masks = input_for_masks[:, :, 0]
         
         # Attention mask for padded token (batch_size, 1, seq_len, seq_len)
-        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1) \
-                    .repeat(1, masked.size(1), 1).unsqueeze(1)
+        pad_mask = (input_for_masks != self.mask_id).unsqueeze(1)
+        return pad_mask.repeat(1, masked.size(1), 1).unsqueeze(1)
 
-        # Embed token_id sequences to vector sequences
-        if segment_labels == None:
-            segment_labels = torch.ones_like(input_for_masks, dtype=torch.int)
-        x = self.embedding(masked, segment_labels)
-
-        # Run through all transformer blocks
-        for transformer in self.transformer_blocks:
-            x = transformer.forward(x, pad_mask)
-        
-        # Returns embeddings or word projections
-        if get_embeddings_only:
-            return x
-        else:
-            return self.final_proj(x)
-        
 
 class BertLoss(nn.Module):
     def __init__(self, mask_id, max_seq_len):
@@ -77,9 +67,6 @@ class BertLoss(nn.Module):
         self.nlll_loss = nn.NLLLoss()
 
     def forward(self, model_output, masked_label_ids, masked_label):
-        """ Forward pass of the loss for bert, i.e., the cross-entropy between
-            model token prediction for masked token and their true values    
-        """
         # Retrieve indexes of masked tokens and their values
         seq_len = model_output.shape[1]
         msk_ids, msk_lbls = [], []
@@ -95,64 +82,70 @@ class BertLoss(nn.Module):
         return self.nlll_loss(prediction, target)
 
 
-class TransformerBlock(nn.Module):
-    """ Bidirectional Encoder = Transformer (self-attention)
-        Transformer = MultiHead_Attn + Feed_Forward with sublayer connection
-    :param d_embed: hidden size of transformer
-    :param n_heads: number of heads in multi-head attention
-    :param d_ff: hidden dimension in the position feedforward network
-    :param dropout: dropout rate
-    """
-    def __init__(self, d_embed, n_heads, d_ff, dropout):
+class FeedForward(nn.Module):
+    def __init__(self, d_embed, d_ff, dropout = 0.1):
         super().__init__()
-        self.attention = MultiHeadedAttention(n_heads=n_heads, d_embed=d_embed)
-        self.feed_forward = PositionwiseFeedForward(d_embed=d_embed,
-                                                    d_ff=d_ff,
-                                                    dropout=dropout)
-        self.input_sublayer = SublayerConnection(size=d_embed, dropout=dropout)
-        self.output_sublayer = SublayerConnection(size=d_embed, dropout=dropout)
-        self.dropout = nn.Dropout(p=dropout)
+        self.net = nn.Sequential(nn.Linear(d_embed, d_ff),
+                                 nn.GELU(),
+                                 nn.Dropout(dropout),
+                                 nn.Linear(d_ff, d_embed),
+                                 nn.Dropout(dropout))
+    def forward(self, x):
+        return self.net(x)
 
-    def forward(self, x, mask):
-        x = self.input_sublayer(x, lambda _x: 
-                                self.attention.forward(_x, _x, _x, mask=mask))
-        x = self.output_sublayer(x, self.feed_forward)
-        return self.dropout(x)
+
+class PreNorm(nn.Module):
+    def __init__(self, dim, fn):
+        super().__init__()
+        self.norm = nn.LayerNorm(dim)
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        return self.fn(self.norm(x), **kwargs)
+
+
+class FourierNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, *args, **kwargs):
+        return torch.fft.fft(torch.fft.fft(x, dim=-1), dim=-2).real
 
 
 class MultiHeadedAttention(nn.Module):
     def __init__(self, n_heads, d_embed, dropout=0.1):
         super().__init__()
         assert d_embed % n_heads == 0
-
-        # We assume d_v always equals d_k
-        self.d_k = d_embed // n_heads
+        self.d_embed = d_embed
+        self.d_head = d_embed // n_heads
         self.n_heads = n_heads
-        self.linear_layers = nn.ModuleList([nn.Linear(d_embed, d_embed) \
-                                            for _ in range(3)])
+        self.q_linear = nn.Linear(d_embed, d_embed)
+        self.k_linear = nn.Linear(d_embed, d_embed)
+        self.v_linear = nn.Linear(d_embed, d_embed)
         self.output_linear = nn.Linear(d_embed, d_embed)
         self.attention = Attention()
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, q, k, v, mask=None):
-        # 1) Do all the linear projections in batch from d_embed => h x d_k
-        batch_size = q.size(0)
-        q, k, v = [
-            l(x).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
-                for l, x in zip(self.linear_layers, (q, k, v))]
+    def _split_by_head(self, x, batch_size):
+        return x.view(batch_size, -1, self.n_heads, self.d_head).transpose(1, 2)
+    
+    def _combine_heads(self, x, batch_size):
+        return x.transpose(1, 2).contiguous().view(batch_size, -1, self.d_embed)
 
-        # 2) Apply attention on all the projected vectors in batch.
+    def forward(self, x, mask=None, return_attention=False):
+        batch_size = x.size(0)
+        q = self._split_by_head(self.q_linear(x), batch_size)
+        k = self._split_by_head(self.k_linear(x), batch_size)
+        v = self._split_by_head(self.v_linear(x), batch_size)
         x, attn = self.attention(q, k, v, mask=mask, dropout=self.dropout)
-
-        # 3) "Concat" using a view and apply a final linear.
-        x = x.transpose(1, 2).contiguous().view(
-                                    batch_size, -1, self.n_heads * self.d_k)
-
-        return self.output_linear(x)
+        x = self._combine_heads(x, batch_size)
+        if return_attention:
+            return self.output_linear(x), attn
+        else:
+            return self.output_linear(x)
 
 
 class Attention(nn.Module):
-    """ Compute 'Scaled Dot Product Attention """
     def forward(self, q, k, v, mask=None, dropout=None):
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(q.size(-1))
         if mask is not None:
@@ -163,85 +156,30 @@ class Attention(nn.Module):
         return torch.matmul(p_attn, v), p_attn
 
 
-class PositionwiseFeedForward(nn.Module):
-    """ Implements FFN equation. """
-    def __init__(self, d_embed, d_ff, dropout=0.1):
-        super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = nn.Linear(d_embed, d_ff)
-        self.w_2 = nn.Linear(d_ff, d_embed)
-        self.dropout = nn.Dropout(dropout)
-        self.activation = GELU()
-
-    def forward(self, x):
-        return self.w_2(self.dropout(self.activation(self.w_1(x))))
-
-
-class GELU(nn.Module):
-    """ Paper notice that BERT used the GELU (not RELU) """
-    def forward(self, x):
-        return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * \
-                         (x + 0.044715 * torch.pow(x, 3))))
-
-
-class SublayerConnection(nn.Module):
-    """ A residual connection followed by a layer norm.
-        Note for code simplicity the norm is first as opposed to last.
-    """
-    def __init__(self, size, dropout):
-        super(SublayerConnection, self).__init__()
-        self.norm = LayerNorm(size)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, x, sublayer):
-        "Apply residual connection to any sublayer with the same size."
-        return x + self.dropout(sublayer(self.norm(x)))
-
-
-class LayerNorm(nn.Module):
-    """ Construct a layernorm module (See citation for details). """
-    def __init__(self, features, eps=1e-6):
-        super(LayerNorm, self).__init__()
-        self.a_2 = nn.parameter.Parameter(torch.ones(features))
-        self.b_2 = nn.parameter.Parameter(torch.zeros(features))
-        self.eps = eps
-
-    def forward(self, x):
-        mean = x.mean(-1, keepdim=True)
-        std = x.std(-1, keepdim=True)
-        return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
-    
-
 class BERTEmbedding(nn.Module):
-    """ BERT Embedding which is consisted with under features
-            1. TokenEmbedding : normal embedding matrix
-            2. PositionalEmbedding : adding positional information using sin, cos
-            2. SegmentEmbedding : adding sentence segment info, (A:1, B:2)
-                sum of all these features are output of BERTEmbedding
-    :param voc_size: total vocab size
-    :param d_embed: embedding size of token embedding
-    :param dropout: dropout rate
-    """
     def __init__(self, vocab_size, pad_id, max_len, d_embed, dropout=0.1):
         super().__init__()
-        self.tok = TokenEmbedding(vocab_size=vocab_size,
-                                  d_embed=d_embed,
-                                  pad_id=pad_id)
-        self.pos = PositionalEmbedding(d_embed=self.tok.embedding_dim,
-                                       max_len=max_len)
-        self.seg = SegmentEmbedding(d_embed=self.tok.embedding_dim)
+        self.tok = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
+        self.pos = PositionalEmbedding(d_embed, max_len=max_len)
+        self.seg = nn.Embedding(3, d_embed)
         self.dropout = nn.Dropout(p=dropout)
-        self.d_embed = d_embed
 
     def forward(self, sequence, segment_labels):
+        # Create an idle segment mask if none is used
+        if segment_labels == None:
+            sequence_for_lbls = sequence
+            if len(sequence_for_lbls.shape) > 2:  # ngram case
+                sequence_for_lbls = sequence_for_lbls[:, :, 0]
+            segment_labels = torch.ones_like(sequence_for_lbls, dtype=torch.int)
+
         # For token_embeddings, sum over ngram dimension if existing
-        token_embeddings = self.tok(sequence)
-        if len(token_embeddings.shape) > 3:
+        tok_embeddings = self.tok(sequence)
+        if len(tok_embeddings.shape) > 3:
             # (batch, seq, ngram, d_embed) -> (batch, seq_len, d_embed)
-            token_embeddings = self.combine_ngram_embeddings(token_embeddings,
-                                                             dim=-2)
+            tok_embeddings = self.combine_ngram_embeddings(tok_embeddings, dim=-2)
         
-        # Add the other embeddings
-        x = token_embeddings + self.pos(sequence) + self.seg(segment_labels)
+        # Add position and segment embeddings
+        x = tok_embeddings + self.pos(sequence) + self.seg(segment_labels)
         return self.dropout(x)
 
     def combine_ngram_embeddings(self, x, dim, reduce='mean'):
@@ -250,11 +188,6 @@ class BERTEmbedding(nn.Module):
             return x.mean(dim=dim) / norm_factor
         else:
             return x.sum(dim=dim)
-        
-        
-class TokenEmbedding(nn.Embedding):
-    def __init__(self, vocab_size, d_embed=512, pad_id=0):
-        super().__init__(vocab_size, d_embed, padding_idx=pad_id)
 
 
 class PositionalEmbedding(nn.Module):
@@ -274,9 +207,3 @@ class PositionalEmbedding(nn.Module):
 
     def forward(self, x):
         return self.pe[:, :x.size(1)]
-
-
-class SegmentEmbedding(nn.Embedding):
-    def __init__(self, d_embed=512):
-        super().__init__(3, d_embed, padding_idx=0)
-        
