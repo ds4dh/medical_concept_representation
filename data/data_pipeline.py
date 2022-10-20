@@ -20,12 +20,8 @@ class DataPipeline():
             self.n_classes = model_params['n_classes']
         
         # Load tokenizer and train it
-        self.ngram_mode = run_params['ngram_mode']
-        self.ngram_min_len = run_params['ngram_min_len']
-        self.ngram_max_len = run_params['ngram_max_len']
         self.max_tokens = train_params['max_tokens_per_batch']
-        self.special_tokens = model_params['special_tokens']
-        self.tokenizer = self.get_tokenizer(model_params)
+        self.tokenizer = self.get_tokenizer(model_params, run_params)
     
     def get_pipeline(self, task, split, shuffle=False):
         """ General pipeline common to all models. Specificities include how
@@ -85,17 +81,18 @@ class DataPipeline():
         else:
             raise Exception('Invalid task given to the pipeline %s' % task)
         
-    def get_tokenizer(self, model_params):
+    def get_tokenizer(self, model_params, run_params):
         """ Load and train a tokenizer with / without ngrams
         """
         # Load the tokenizer
-        if self.ngram_mode == 'word':
-            tokenizer = data.Tokenizer(self.special_tokens)
-        elif self.ngram_mode in ['subword', 'icd', 'char']:
-            tokenizer = data.SubWordTokenizer(self.ngram_min_len,
-                                              self.ngram_max_len,
-                                              self.ngram_mode,
-                                              self.special_tokens)
+        if run_params['ngram_mode'] == 'word':
+            tokenizer = data.Tokenizer(model_params['special_tokens'])
+        elif run_params['ngram_mode'] in ['subword', 'icd', 'char']:
+            tokenizer = data.SubWordTokenizer(run_params['ngram_min_len'],
+                                              run_params['ngram_max_len'],
+                                              run_params['ngram_mode'],
+                                              run_params['ngram_base_voc'],
+                                              model_params['special_tokens'])
         else:
             raise Exception('Invalid ngram mode given to the pipeline.')
         

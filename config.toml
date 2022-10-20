@@ -1,30 +1,31 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo',
   #                  'bert', 'bert_classifier', 'transformer'
-  model_used = 'bert_classifier'
+  model_used = 'bert'
   model_version = 2
-  exp_id = 'reagent_pred'
+  exp_id = 'test'
   ngram_mode = 'word'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
-  debug = false
-  load_model = true  # note: changing ngram_len will change embedding layer
+  ngram_base_voc = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode == 'icd'
+  debug = true
+  load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
-  # data_dir = './data/datasets/autophe'
-  # data_subdir = 'time_not_categorized'
-  data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
-  data_subdir = 'smiles'
+  data_dir = './data/datasets/autophe'
+  data_subdir = 'time_not_categorized'
+  # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
+  # data_subdir = 'smiles'
   log_dir = './logs'
   max_seq_len = 512
 
 [train]
   optimizer = 'adamw'  # adam, radam, adamw
   scheduler = 'noam'  # 'noam', 'linear'
-  lr = 0.00014  # learning rate after warmup  # set to smaller for bert_classifier!
+  lr = 0.001  # learning rate after warmup  # set to smaller for bert_classifier!
   betas = [0.9, 0.998]  # momentum
   weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 4
@@ -89,13 +90,14 @@
       '[END]' = 4
 
   [models.bert]
-    task = 'reagent_pred_mlm'  # 'mlm', 'reagent_pred_mlm'
+    task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
+    attn_type = 'attention'  # 'fourier', 'attention' -> TODO: change to several models
     input_keys = ['masked']
     label_keys = ['masked_label', 'masked_label_ids']
-    n_layers = 6  # 4
-    d_embed = 384  # 256
-    d_ff = 3072  # 2048
-    n_heads = 12  # 8
+    n_layers = 4
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0

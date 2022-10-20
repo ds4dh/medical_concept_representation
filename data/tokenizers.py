@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from nltk.util import ngrams
+from nltk.util import ngrams as ngram_base_fn
 
 
 class Tokenizer():
@@ -74,7 +74,8 @@ class SubWordTokenizer():
             ngrams suited to icd codes (forward-only ngrams))
     
     """
-    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode,
+    def __init__(self,
+                 ngram_min_len, ngram_max_len, ngram_mode, ngram_base_voc,
                  special_tokens, min_freq=0, brackets=['<', '>']):
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
@@ -84,6 +85,7 @@ class SubWordTokenizer():
         self.brackets = brackets
         self.forbidden_ngrams = brackets + list(special_tokens.keys())
         self.ngram_mode = ngram_mode
+        self.ngram_base_voc = ngram_base_voc
         self.ngram_fn = self._select_ngram_fn(ngram_mode)
         
     def _select_ngram_fn(self, ngram_mode):
@@ -100,15 +102,23 @@ class SubWordTokenizer():
 
     @staticmethod
     def _generate_ngrams(word, n, forbidden_ngram):
-        return [ngram for ngram in ["".join(i) for i in ngrams(word, n)]
+        return [ngram for ngram in ["".join(i) for i in ngram_base_fn(word, n)]
                 if (ngram not in forbidden_ngram)]  # and (word[1:-1] not in ngram)]
     
-    @staticmethod
-    def _generate_icd_ngrams(txt):
+    def _initialize_ngrams(self, word):
+        for basic_token in self.ngram_base_voc:
+            if basic_token in word:
+                return word.split(basic_token)[-1], [basic_token]
+        return word, []
+    
+    def _generate_icd_ngrams(self, word):
         # TODO: do this only for appropriate codes (DIA, PRO, MED?, LAB?)
-        return [txt[:i] for i in range(1, len(txt))]
+        word, ngrams = self._initialize_ngrams(word)
+        ngrams.extend([word[:i] for i in range(1, len(word))])
+        return ngrams
 
     def _generate_multi_ngrams(self, word):
+        # word, ngrams = self._initialize_ngrams(word)
         return self._flatten([self._generate_ngrams(
             word, i, self.forbidden_ngrams) for i in self.ngram_len])
     
