@@ -35,7 +35,9 @@ class BERTClassifier(nn.Module):
     def forward(self, sample):
         """ Forward pass of the BERT Classifier """
         embeddings = self.bert(sample, get_embeddings_only=True)
-        return self.classifier(embeddings[:, 0, :])  # good like this?
+        cls_embedding = embeddings[:, 0, :]
+        rest_embedding = embeddings[:, 1:, :].mean(dim=1)
+        return self.classifier(cls_embedding + rest_embedding)
     
     def load_bert_weights(self, bert_ckpt_path):
         """ Load pre-trained weights for BERT """

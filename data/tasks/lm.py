@@ -1,4 +1,3 @@
-from lib2to3.pgen2 import tokenize
 import random
 import numpy as np
 from torchdata.datapipes.iter import IterDataPipe
