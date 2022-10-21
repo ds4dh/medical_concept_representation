@@ -91,7 +91,8 @@ class DataPipeline():
             tokenizer = data.SubWordTokenizer(run_params['ngram_min_len'],
                                               run_params['ngram_max_len'],
                                               run_params['ngram_mode'],
-                                              run_params['ngram_base_voc'],
+                                              run_params['ngram_base_prefixes'],
+                                              run_params['ngram_base_suffixes'],
                                               model_params['special_tokens'])
         else:
             raise Exception('Invalid ngram mode given to the pipeline.')

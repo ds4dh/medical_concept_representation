@@ -1,13 +1,13 @@
 [run]
-  # Possible models: 'fasttext', 'glove', 'elmo',
-  #                  'bert', 'bert_classifier', 'transformer'
+  # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier', 'transformer'
   model_used = 'glove'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'subword'  # 'word', 'subword', 'icd'
+  ngram_mode = 'icd'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
-  ngram_base_voc = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
+  ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
+  ngram_base_suffixes = [':OK', ':AB']  # only used for ngram_mode != 'word'
   debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = true  # TODO: implement this
@@ -25,7 +25,7 @@
 [train]
   optimizer = 'adamw'  # adam, radam, adamw
   scheduler = 'noam'  # 'noam', 'linear'
-  lr = 0.001  # learning rate after warmup  # set to smaller for bert_classifier!
+  lr = 0.001  # learning rate after warmup  # tip: set a smaller lr for bert_classifier!
   betas = [0.9, 0.998]  # momentum
   weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1
@@ -119,4 +119,4 @@
     n_classes = 100  # 0: all reagents, > 0: most popular reagents
     load_pretrained_bert = true
     bert_path = './logs/reagent_pred/bert_ngram-word/version_0/'
-    bert_grad_type = 'all'  # 'none', 'norm', 'all' (weights tuned in bert)
+    bert_grad_type = 'all'  # 'last', 'none', 'norm', 'all' (weights tuned in bert)

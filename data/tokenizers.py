@@ -72,9 +72,9 @@ class SubWordTokenizer():
             ngrams suited to icd codes (forward-only ngrams))
     
     """
-    def __init__(self,
-                 ngram_min_len, ngram_max_len, ngram_mode, ngram_base_voc,
-                 special_tokens, min_freq=0, brackets=['<', '>']):
+    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode,
+                 ngram_base_prefixes, ngram_base_suffixes, special_tokens,
+                 min_freq=0, brackets=['<', '>']):
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
         assert ngram_min_len >= 0 and ngram_max_len >= ngram_min_len
@@ -83,7 +83,8 @@ class SubWordTokenizer():
         self.brackets = brackets
         self.forbidden_ngrams = brackets + list(special_tokens.keys())
         self.ngram_mode = ngram_mode
-        self.ngram_base_voc = ngram_base_voc
+        self.ngram_base_prefixes = ngram_base_prefixes
+        self.ngram_base_suffixes = ngram_base_suffixes
         self.ngram_fn = self._select_ngram_fn(ngram_mode)
         
     def _select_ngram_fn(self, ngram_mode):
@@ -104,10 +105,14 @@ class SubWordTokenizer():
                 if (ngram not in forbidden_ngram)]  # and (word[1:-1] not in ngram)]
     
     def _initialize_ngrams(self, word):
-        for basic_token in self.ngram_base_voc:
-            if basic_token in word:
-                return word.replace(basic_token, ''), [basic_token]
-        return word, []
+        base_ngrams = []
+        for base_voc in [self.ngram_base_prefixes, self.ngram_base_suffixes]:
+            for base_token in base_voc:
+                if base_token in word:
+                    word = word.replace(base_token, '')
+                    base_ngrams.append(base_token)
+                    break
+        return word, base_ngrams
     
     def _generate_icd_ngrams(self, word):
         # TODO: do this only for appropriate codes (DIA, PRO, MED?, LAB?)
