@@ -57,6 +57,7 @@ class BERTClassifier(nn.Module):
             - 'norm' will only let the norm weights of BERT be fine-tuned
             - 'all' will let all weights of BERT be fine-tuned on the task
         """
+        # TODO: implement 'last' method
         # Set all bert parameters to no-learning-mode
         if bert_grad_type in ['none', 'norm']:
             for param in self.bert.parameters():

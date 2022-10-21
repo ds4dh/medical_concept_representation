@@ -1,4 +1,4 @@
-# Some parts taken from https://github.com/rishikksh20/FNet-pytorch
+# Main structure taken from https://github.com/rishikksh20/FNet-pytorch
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,7 +10,6 @@ class BERT(nn.Module):
                  d_ff, n_layers, attn_type, dropout=0.1, n_heads=None,
                  *args, **kwargs):
         super().__init__()
-        assert not (attn_type == 'attention' and n_heads is None)
         self.mask_id = special_tokens['[MASK]']
         self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
 
@@ -21,6 +20,7 @@ class BERT(nn.Module):
                                        pad_id=special_tokens['[PAD]'])
         
         # BERT layers
+        assert not (attn_type == 'attention' and n_heads is None)
         self.layers = nn.ModuleList([])
         for l in range(n_layers):
             if attn_type == 'fourier' and l < n_layers - 2:
@@ -28,8 +28,8 @@ class BERT(nn.Module):
             else:
                 attn_module = MultiHeadedAttention(n_heads, d_embed, dropout)
             self.layers.append(nn.ModuleList([
-                PreNorm(d_embed, attn_module),
-                PreNorm(d_embed, FeedForward(d_embed, d_ff, dropout))]))
+                Norm(d_embed, attn_module),
+                Norm(d_embed, FeedForward(d_embed, d_ff, dropout))]))
         
         # Final projection to predict words for each masked token
         self.final_proj = nn.Linear(d_embed, vocab_sizes['total'])
@@ -90,18 +90,25 @@ class FeedForward(nn.Module):
                                  nn.Dropout(dropout),
                                  nn.Linear(d_ff, d_embed),
                                  nn.Dropout(dropout))
+
     def forward(self, x):
         return self.net(x)
 
 
-class PreNorm(nn.Module):
-    def __init__(self, dim, fn):
+class Norm(nn.Module):
+    def __init__(self, dim, fn, mode='pre'):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
+        self.mode = mode
 
     def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
+        if self.mode == 'pre':
+            return self.fn(self.norm(x), **kwargs)
+        elif self.mode == 'post':
+            return self.norm(self.fn(x, **kwargs))  # not tested yet
+        else:
+            raise ValueError('Invalid mode for normalization (pre, post)')
 
 
 class FourierNet(nn.Module):
