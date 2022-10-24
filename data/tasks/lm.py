@@ -15,7 +15,10 @@ class LMSetter(IterDataPipe):
     def __iter__(self):
         """ Sample format: list of token ids """
         for sample in self.dp:
-            yield {'sample': self.beos_fn(sample)}
+            if isinstance(sample, dict):
+                yield {k: self.beos_fn(sample[k]) for k in sample.keys()}
+            else:
+                yield {'sample': self.beos_fn(sample)}
 
     def beos_fn(self, sample):
         """ Add start and end tokens to a sequence of tokens """
