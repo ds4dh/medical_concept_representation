@@ -47,6 +47,9 @@ class Tokenizer():
     
     def decode(self, token_id):
         return self.decoder[token_id]
+    
+    def get_vocab(self):
+        return self.encoder.keys()
 
 
 class SubWordTokenizer():
@@ -204,4 +207,8 @@ class SubWordTokenizer():
             return self.decoder[token_id_or_ids]
         else:
             raise TypeError('Invalid token format: %s' % type(token_id_or_ids))
+
+    def get_vocab(self):
+        voc = self.encoder.keys()  # still has brackets around each word
+        return [w.strip(self.brackets[0]).strip(self.brackets[1]) for w in voc]
         
