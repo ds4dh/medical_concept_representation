@@ -40,18 +40,18 @@ class Glove(nn.Module):
             return x.mean(dim=dim) / norm_factor
         else:
             return x.sum(dim=dim)
-        
-    def get_embeddings(self, token_indices):
+    
+    def get_token_embeddings(self, token_indices):
+        """ Compute static embeddings for a list of tokens
+        """
+        all_embeddings = self.l_emb.weight + self.r_emb.weight
         token_embeddings = []
         for token_index in token_indices:
-            token_index = torch.tensor(token_index).unsqueeze(dim=0)
-            as_left = self.l_emb(token_index)
-            as_right = self.l_emb(token_index)
-            if len(as_left.shape) > 2:  # ngram case
-                as_left = self.combine_ngram_embeddings(as_left, dim=-2)
-                as_right = self.combine_ngram_embeddings(as_right, dim=-2)
-            token_embeddings.append(as_left + as_right)
-        return torch.cat(token_embeddings, dim=0).detach().numpy()
+            embedded = all_embeddings[token_index]
+            if len(embedded.shape) > 1:  # ngram case
+                embedded = self.combine_ngram_embeddings(embedded, dim=-2)
+            token_embeddings.append(embedded)
+        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
 
 
 class GloveLoss(nn.Module):

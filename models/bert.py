@@ -56,6 +56,32 @@ class BERT(nn.Module):
         # Attention mask for padded token (batch_size, 1, seq_len, seq_len)
         pad_mask = (input_for_masks != self.mask_id).unsqueeze(1)
         return pad_mask.repeat(1, masked.size(1), 1).unsqueeze(1)
+    
+    def get_token_embeddings(self, token_indices):
+        """ Compute static embeddings for a list of tokens
+        """
+        embedder = self.embedding
+        all_embeddings = embedder.tok.weight
+        token_embeddings = []
+        for token_index in token_indices:
+            embedded = all_embeddings[token_index]
+            if len(embedded.shape) > 1:  # ngram case
+                embedded = embedder.combine_ngram_embeddings(embedded, dim=-2)
+            token_embeddings.append(embedded)
+        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
+    
+    def get_sequence_embeddings(self, sequences):
+        """ Compute contextualized embeddings for a list of sequences
+        """
+        embedder = self.embedding
+        all_embeddings = embedder.tok.weight
+        token_embeddings = []
+        # for token_index in token_indices:
+        #     embedded = all_embeddings[token_index]
+        #     if len(embedded.shape) > 1:  # ngram case
+        #         embedded = embedder.combine_ngram_embeddings(embedded, dim=-2)
+        #     token_embeddings.append(embedded)
+        # return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
 
 
 class BertLoss(nn.Module):

@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -34,9 +35,18 @@ class FastText(nn.Module):
             return x.mean(dim=dim) / norm_factor
         else:
             return x.sum(dim=dim)
-
-    def get_embeddings(self):
-        ...
+    
+    def get_token_embeddings(self, token_indices):
+        """ Compute static embeddings for a list of tokens
+        """
+        all_embeddings = self.embed.weight
+        token_embeddings = []
+        for token_index in token_indices:
+            embedded = all_embeddings[token_index]
+            if len(embedded.shape) > 1:  # ngram case
+                embedded = self.combine_ngram_embeddings(embedded, dim=-2)
+            token_embeddings.append(embedded)
+        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
 
     def export_as_gensim(self, path, tokenizer):
         embeddings = self.get_embeddings()
