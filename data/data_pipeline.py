@@ -11,9 +11,8 @@ class DataPipeline():
     """
     def __init__(self, data_params, run_params, train_params, model_params):
         # Data parameters
-        self.data_dir = data_params['data_dir']
-        self.data_subdir = data_params['data_subdir']
-        self.data_fulldir = os.path.join(self.data_dir, self.data_subdir)
+        self.data_fulldir = os.path.join(data_params['data_dir'],
+                                         data_params['data_subdir'])
         self.max_seq_len = data_params['max_seq_len']
         self.debug = run_params['debug']  # smaller dataset for training
         if 'n_classes' in model_params.keys():
@@ -71,9 +70,9 @@ class DataPipeline():
         elif task == 'cooc':
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
         elif task in ['mt', 'reagent_pred_mt']:
-            return tasks.BosEosAdder(dp, self.tokenizer)
+            return tasks.BosEosAdder(dp, self.tokenizer)  # voir comment on fait
         elif task == 'lm':
-            return tasks.ElmoSetter(dp, self.tokenizer)
+            return tasks.LMSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
             return tasks.DynamicMasker(dp, self.tokenizer)
         elif task == 'reagent_pred_cls':
