@@ -3,7 +3,7 @@
   model_used = 'glove'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'icd'  # 'word', 'subword', 'icd'
+  ngram_mode = 'word'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
@@ -54,15 +54,15 @@
   
   [models.elmo]
     task = 'lm'
-    input_keys = ['chars', 'words']
-    label_keys = ['words']
+    input_keys = ['sample']
+    label_keys = ['sample']
     d_conv = [512, 512]
     k_size = [2, 3]  # should be ngram_len lists?
     d_embed_char = 256
     d_embed_word = 256
     d_lstm = 512
     n_lstm_layers = 2
-    add_words = true  # if true, add whole word embeddings to char embeddings
+    token_type = 'char'  # 'char' (classic elmo), 'word', 'both'
     dropout = 0.5
     [models.elmo.special_tokens]
       '[PAD]' = 0

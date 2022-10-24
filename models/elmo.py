@@ -1,25 +1,29 @@
 import torch
 import torch.nn as nn
+from itertools import zip_longest
 from torch import relu, sigmoid
 
 
 class ELMO(nn.Module):
     def __init__(self, n_lstm_layers, d_lstm, d_embed_char, d_embed_word,
-                 d_conv, k_size, vocab_sizes, special_tokens, add_words,
+                 d_conv, k_size, vocab_sizes, special_tokens, token_type,
                  dropout=0.5, *args, **kwargs):
         super().__init__()
-        # Retrieve vocabulary information
+        # Retrieve vocabulary information (char_shift for char embeddings)
         self.pad_id = special_tokens['[PAD]']
+        self.bos_id = special_tokens['[CLS]']
+        self.eos_id = special_tokens['[END]']
         self.special_token_ids = list(special_tokens.values())
-        self.n_words = vocab_sizes['word']
+        self.char_shift = vocab_sizes['special'] + vocab_sizes['word'] - 1
         
         # Check types of token embeddings used in the model
-        self.token_type = 'word' if 'ngram' not in vocab_sizes else 'char'
-        if add_words:
-            assert self.token_type == 'char', 'The model requires ngram ' + \
-                'lengths > 0 to add whole word embeddings to char embeddings.'
-            self.token_type = 'both'
-        
+        self.token_type = token_type
+        assert (token_type == 'char' and 'ngram' in vocab_sizes) or \
+               (token_type == 'both' and 'ngram' in vocab_sizes) or \
+               (token_type == 'word' and 'ngram' not in vocab_sizes), \
+               'Bad token_type / tokenizer combination. Good combinations ' \
+               'are: (char or both / subword or icd, word / word)'
+
         # Word embeddings
         word_vocab_size = vocab_sizes['word'] + vocab_sizes['special']
         if self.token_type in ['word', 'both']:
@@ -30,7 +34,7 @@ class ELMO(nn.Module):
         # Layers from character to word embeddings
         if self.token_type in ['char', 'both']:
             char_vocab_size = vocab_sizes['ngram'] + vocab_sizes['special']
-            self.char_embedding = nn.Embedding(char_vocab_size,
+            self.char_embedding = nn.Embedding(char_vocab_size + 1,  # for pad
                                                d_embed_char,
                                                padding_idx=self.pad_id)
             self.char_cnn = CharCNN(d_conv, k_size, d_embed_char, d_embed_word)
@@ -42,29 +46,37 @@ class ELMO(nn.Module):
         # Loss function used by the model
         self.loss_fn = ELMOLoss()
         
-    def forward(self, chars, words, return_all_states=False):
+    def forward(self, sample):
         """ Forward pass of the ELMO model
             - Inputs:
-                chars (batch_size, seq_len, ngram_len)
-                words (batch_size, seq_len)
+                sample (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
             - Output (batch_size, seq_len, d_emb_word)
         """
-        # char_emb = self.char_embedding(chars)
-        # static_emb = self.char_cnn(char_emb)
-        static_emb = self.compute_static_embeddings(chars, words)
-        context_emb = self.word_lstm(static_emb, return_all_states)
-        if return_all_states:
-            return context_emb  # for downstream task
-        else:
-            return self.final_proj(context_emb)  # for pre-training
+        static_emb = self.compute_static_embeddings(sample)
+        context_emb = self.word_lstm(static_emb, return_all_states=False)
+        return self.final_proj(context_emb)  # for pre-training
 
-    def compute_static_embeddings(self, chars, words):       
+    def parse_words_and_chars(self, sample):
+        if self.token_type in ['both', 'char']:
+            chars = sample[:, :, 1:] - self.char_shift  # for char embedding
+            chars[chars < 0] = self.pad_id  # only char special token: pad_id
+            if self.token_type == 'both':
+                words = sample[:, :, 0]
+                return words, chars
+            else:
+                return None, chars
+        
+        else:  # 'word'
+            return sample, None
+        
+    def compute_static_embeddings(self, sample):
         """ Create word static embeddings from characters and/or words
             - Inputs:
-                chars (batch_size, seq_len, ngram_len)
-                words (batch_size, seq_len)
+                sample (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
             - Output (batch_size, seq_len, d_emb_word)
-        """ 
+        """
+        words, chars = self.parse_words_and_chars(sample)
+
         if self.token_type == 'char':
             char_emb = self.char_embedding(chars)
             return self.char_cnn(char_emb)
@@ -84,10 +96,35 @@ class ELMO(nn.Module):
         else:
             return char_emb + word_emb
 
-    def get_embeddings(self):
-        """ Compute embeddings for ELMO model
+    def get_token_embeddings(self, token_indices):
+        """ Compute static embeddings for a list of tokens
         """
-        ...
+        embeddings = []
+        for token_index in token_indices:
+            sequence_1 = self.pre_process_for_embeddings([token_index])
+            sequence_2 = torch.tensor(token_index)[None, None, ...]
+            embedded_1 = self.compute_static_embeddings(sequence_1)
+            embedded_2 = self.compute_static_embeddings(sequence_2)
+            import pdb; pdb.set_trace()
+            # embeddings.append(embedded.squeeze())
+        return torch.stack(embeddings, dim=0).detach().cpu().numpy()
+    
+    def get_sequence_embeddings(self, sequence):
+        """ Compute contextualized embeddings for a sequence of tokens
+        """
+        sequence = self.pre_process_for_embeddings(sequence)
+        static_emb = self.compute_static_embeddings(sequence)
+        context_emb = self.word_lstm(static_emb, return_all_states=True)
+        embedded = context_emb[-2:].mean(dim=(0, 2))  # sequence embeddings
+        return embedded.squeeze().detach().cpu().numpy()
+    
+    def pre_process_for_embeddings(self, sequence):
+        if isinstance(sequence[0], list):  # ngram case
+            sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
+            sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
+        else:
+            sequence.insert(0, self.bos_id); sequence.append(self.eos_id)
+        return torch.tensor(sequence)[None, ...]  # add batch dimension
         
 
 class ELMOLoss(nn.Module):
@@ -96,19 +133,20 @@ class ELMOLoss(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, words):
+    def forward(self, model_output, sample):
+        if len(sample.shape) > 2:  # ngram case
+            sample = sample[:, :, 0]
         logits = self.log_softmax(model_output).transpose(2, 1)
-        return self.nlll_loss(logits, words)
+        return self.nlll_loss(logits, sample)
     
 
 class CharCNN(nn.Module):
     def __init__(self, d_convs, k_sizes, d_emb_char, d_emb_word, activ_fn=relu):
         super().__init__()
-        self.cnn_layers = nn.ModuleList([
+        self.conv_layers = nn.ModuleList([
             nn.Conv1d(in_channels=d_emb_char,
                       out_channels=d_conv,
-                      kernel_size=k_size,  # kernel_size is like n-gram
-                      bias=True)
+                      kernel_size=k_size)  # kernel_size is like n-gram
             for (d_conv, k_size) in zip(d_convs, k_sizes)])
         self.activ_fn = activ_fn
         self.highway = Highway(sum(d_convs), n_layers=2)
@@ -119,11 +157,14 @@ class CharCNN(nn.Module):
             - Input has shape (batch_size, seq_len, n_char_max, d_emb_char)
             - Output has shape (batch_size, seq_len, d_emb_word)
         """
-        # import pdb; pdb.set_trace()
         x = self._reshape(x)
         cnn_out_list = []
-        for layer in self.cnn_layers:
-            cnn_out, _ = torch.max(layer(x), dim=-1)
+        for layer in self.conv_layers:
+            try:
+                cnn_out, _ = torch.max(layer(x), dim=-1)
+            except RuntimeError:  # if word too small for conv filter size  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
+                x_adapted = x.repeat((1, 1, layer.kernel_size[0]))  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
+                cnn_out, _ = torch.max(layer(x_adapted), dim=-1)  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
             cnn_out_list.append(self.activ_fn(cnn_out))
         concat = self._deshape(torch.cat(cnn_out_list, dim=-1))
         return self.word_emb_proj(self.highway(concat))
@@ -184,7 +225,7 @@ class WordLSTM(nn.Module):
         """ Forward pass of the multi-layered bilateral lstm module
             - Input has shape (batch_size, seq_len, d_emb_word)
             - If return_all_states == True:
-                output has shape (1+2L, batch_size, seq_len, d_emb_word)
+                output has shape (1 + 2L, batch_size, seq_len, d_emb_word)
             - If return_all_states == False: (return only output of last layer)
                 output has shape (batch_size, seq_len, 2 * d_emb_word)
         """
@@ -201,7 +242,7 @@ class WordLSTM(nn.Module):
             else:
                 forw_x, back_x = forw_out, back_out
         
-        if return_all_states:  # (1+2L, batch_size, seq_len, d_emb_word)
+        if return_all_states:  # (1 + 2L, batch_size, seq_len, d_emb_word)
             return torch.stack(context_embeddings, dim=0)
         else:  # (batch_size, seq_len, 2 * d_emb_word)
             return torch.cat(context_embeddings[-2:], dim=-1)
