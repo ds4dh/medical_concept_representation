@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
+from itertools import zip_longest
 
 
 class BERT(nn.Module):
@@ -70,18 +71,34 @@ class BERT(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
     
-    def get_sequence_embeddings(self, sequences):
-        """ Compute contextualized embeddings for a list of sequences
+    def get_sequence_embeddings(self, sequence, mode='static'):
+        """ Compute contextualized embeddings for a sequence of tokens
         """
-        embedder = self.embedding
-        all_embeddings = embedder.tok.weight
-        token_embeddings = []
-        # for token_index in token_indices:
-        #     embedded = all_embeddings[token_index]
-        #     if len(embedded.shape) > 1:  # ngram case
-        #         embedded = embedder.combine_ngram_embeddings(embedded, dim=-2)
-        #     token_embeddings.append(embedded)
-        # return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
+        if mode == 'static':
+            embedder = self.embedding
+            all_embeddings = embedder.tok.weight
+            embedded = []
+            for token_index in sequence:
+                embedded.append(all_embeddings[token_index])
+            # TODO: something like cat or stack, then weighted average
+
+        elif mode in ['context', 'cls']:
+            sequence = self.pre_process_for_embeddings(sequence)
+            embedded = self.forward(sequence, get_embeddings=True)
+            if mode == 'context':
+                # TODO: frequency-weighted average
+                embedded = embedded.mean(dim=1)
+            else:
+                embedded = embedded[:, 0]  # '[CLS]' token embedding
+        return embedded.squeeze().detach().cpu().numpy()
+    
+    def pre_process_for_embeddings(self, sequence):
+        if isinstance(sequence[0], list):  # ngram case
+            sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
+            sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
+        else:
+            sequence.insert(0, self.bos_id); sequence.append(self.eos_id)
+        return torch.tensor(sequence)[None, ...]  # add batch dimension
 
 
 class BertLoss(nn.Module):

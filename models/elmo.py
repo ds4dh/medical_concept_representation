@@ -101,21 +101,19 @@ class ELMO(nn.Module):
         """
         embeddings = []
         for token_index in token_indices:
-            sequence_1 = self.pre_process_for_embeddings([token_index])
-            sequence_2 = torch.tensor(token_index)[None, None, ...]
-            embedded_1 = self.compute_static_embeddings(sequence_1)
-            embedded_2 = self.compute_static_embeddings(sequence_2)
-            import pdb; pdb.set_trace()
-            # embeddings.append(embedded.squeeze())
+            token_index = torch.tensor(token_index)[None, None, ...]
+            embedded = self.compute_static_embeddings(token_index)
+            embeddings.append(embedded.squeeze())
         return torch.stack(embeddings, dim=0).detach().cpu().numpy()
     
-    def get_sequence_embeddings(self, sequence):
+    def get_sequence_embeddings(self, sequence, mode='context'):
         """ Compute contextualized embeddings for a sequence of tokens
         """
         sequence = self.pre_process_for_embeddings(sequence)
         static_emb = self.compute_static_embeddings(sequence)
         context_emb = self.word_lstm(static_emb, return_all_states=True)
         embedded = context_emb[-2:].mean(dim=(0, 2))  # sequence embeddings
+        # TODO: mean over dimension 2 should be weighted, dimension 0 should be conditional on full or last only mode
         return embedded.squeeze().detach().cpu().numpy()
     
     def pre_process_for_embeddings(self, sequence):
