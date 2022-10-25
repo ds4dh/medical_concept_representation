@@ -38,15 +38,15 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
         
-        # # THIS IS JUST TO TEST MY METRICS WITHOUT TRAINING A MODEL, WILL REMOVE
-        # # TODO: DEFINIR DANS PIPELINE UNE LISTE DE PARTIALS AVEC MODELE EN 1ER ARGUMENT
-        # import os
+        # THIS IS JUST TO TEST MY METRICS WITHOUT TRAINING A MODEL, WILL REMOVE
+        # TODO: DEFINIR DANS PIPELINE UNE LISTE DE PARTIALS AVEC MODELE EN 1ER ARGUMENT
+        import os
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
-        # metrics.prediction_task_ehr(self.model,
-        #                             os.path.join(data_params['data_dir'],
-        #                                          data_params['data_subdir']),
-        #                             self.pipeline.tokenizer)
-        # exit()
+        metrics.prediction_task_ehr(self.model,
+                                    os.path.join(data_params['data_dir'],
+                                                 data_params['data_subdir']),
+                                    self.pipeline.tokenizer)
+        exit()
         
     def step(self, batch, batch_idx, mode):
         """ Proceed forward pass of the mode ('train' or 'val'), compute loss

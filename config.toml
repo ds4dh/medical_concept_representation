@@ -1,6 +1,6 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier', 'transformer'
-  model_used = 'glove'
+  model_used = 'fasttext'
   model_version = 0
   exp_id = 'test'
   ngram_mode = 'word'  # 'word', 'subword', 'icd'

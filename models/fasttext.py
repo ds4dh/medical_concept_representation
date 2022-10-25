@@ -46,8 +46,26 @@ class FastText(nn.Module):
             if len(embedded.shape) > 1:  # ngram case
                 embedded = self.combine_ngram_embeddings(embedded, dim=-2)
             token_embeddings.append(embedded)
-        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
-
+        return torch.stack(token_embeddings, dim=0).detach().cpu()
+    
+    def get_sequence_embeddings(self, sequence, weights=None):
+        """ Compute static embedding for a sequence of tokens
+        """
+        embeddings = self.get_token_embeddings(sequence)
+        if weights == None:
+            return embeddings.mean(dim=-2)
+        else:
+            return self.computed_weighted_average(sequence, embeddings, weights)
+    
+    def computed_weighted_average(self, sequence, embeddings, weights):
+        TODO: TEST THIS FUNCTION
+        if isinstance(sequence[0], list):
+            weights = [weights[t[0]] for t in sequence]
+        else:
+            weights = weights[sequence]  # check good behaviour
+        return embeddings @ weights / weights.sum()  # something like this
+        
+        
     def export_as_gensim(self, path, tokenizer):
         embeddings = self.get_embeddings()
         with open(path, 'w', encoding='utf-8') as f:

@@ -97,26 +97,32 @@ class ELMO(nn.Module):
             return char_emb + word_emb
 
     def get_token_embeddings(self, token_indices):
-        """ Compute static embeddings for a list of tokens
+        """ Compute static embeddings for a token list
         """
         embeddings = []
         for token_index in token_indices:
             token_index = torch.tensor(token_index)[None, None, ...]
             embedded = self.compute_static_embeddings(token_index)
             embeddings.append(embedded.squeeze())
-        return torch.stack(embeddings, dim=0).detach().cpu().numpy()
+        return torch.stack(embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, mode='context'):
-        """ Compute contextualized embeddings for a sequence of tokens
+    def get_sequence_embeddings(self, sequence, mode='static'):
+        """ Compute embedding (static or contextualized) for a token sequence
         """
-        sequence = self.pre_process_for_embeddings(sequence)
-        static_emb = self.compute_static_embeddings(sequence)
-        context_emb = self.word_lstm(static_emb, return_all_states=True)
-        embedded = context_emb[-2:].mean(dim=(0, 2))  # sequence embeddings
-        # TODO: mean over dimension 2 should be weighted, dimension 0 should be conditional on full or last only mode
-        return embedded.squeeze().detach().cpu().numpy()
+        sequence = self.pre_process_for_sequence(sequence)
+        embedded = self.compute_static_embeddings(sequence)
+        if 'context' in mode:  # else, keep static embeddings
+            embedded = self.word_lstm(embedded, return_all_states=True)
+            if mode == 'context_last':
+                embedded = embedded[-2:].mean(dim=0)  # last bi-lstm layer
+            elif mode == 'context_all':
+                embedded = embedded.mean(dim=0)  # static + all bi-lstm layers
+            else:
+                raise ValueError('Bad context mode for elmo')
+        embedded = embedded.mean(dim=-2)  # TODO: weighted average over sequence
+        return embedded.squeeze().detach().cpu()
     
-    def pre_process_for_embeddings(self, sequence):
+    def pre_process_for_sequence(self, sequence):
         if isinstance(sequence[0], list):  # ngram case
             sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
             sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
@@ -144,7 +150,8 @@ class CharCNN(nn.Module):
         self.conv_layers = nn.ModuleList([
             nn.Conv1d(in_channels=d_emb_char,
                       out_channels=d_conv,
-                      kernel_size=k_size)  # kernel_size is like n-gram
+                      kernel_size=k_size,  # kernel_size is like n-gram
+                      padding=k_size//2)  # useful for small words (good?)
             for (d_conv, k_size) in zip(d_convs, k_sizes)])
         self.activ_fn = activ_fn
         self.highway = Highway(sum(d_convs), n_layers=2)
@@ -158,11 +165,7 @@ class CharCNN(nn.Module):
         x = self._reshape(x)
         cnn_out_list = []
         for layer in self.conv_layers:
-            try:
-                cnn_out, _ = torch.max(layer(x), dim=-1)
-            except RuntimeError:  # if word too small for conv filter size  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
-                x_adapted = x.repeat((1, 1, layer.kernel_size[0]))  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
-                cnn_out, _ = torch.max(layer(x_adapted), dim=-1)  # WRONG IF SIZE > 1 -> BETTER SOLUTION: PADDING IN CONV
+            cnn_out, _ = torch.max(layer(x), dim=-1)
             cnn_out_list.append(self.activ_fn(cnn_out))
         concat = self._deshape(torch.cat(cnn_out_list, dim=-1))
         return self.word_emb_proj(self.highway(concat))

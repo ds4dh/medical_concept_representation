@@ -45,13 +45,13 @@ def get_gold_list(sequence, tokenizer, cat):
 
 def get_input_emb(model, sequence, tokenizer, cat):
     input_sequence = [tokenizer.encode(t) for t in sequence if cat not in t]
-    import pdb; pdb.set_trace()
     input_emb = model.get_sequence_embeddings(input_sequence)
-    import pdb; pdb.set_trace()
     return np.expand_dims(input_emb, axis=0)
 
 def cosine_hit(input_emb, labels_emb, labels, gold_list, topk):
     similarities = cossim(input_emb, labels_emb)
     topk_sim_indices = np.argsort(similarities)[0][-topk:][::-1]
     topk_indices = [labels[k] for k in topk_sim_indices]
+    if isinstance(topk_indices[0], list):
+        topk_indices = [t[0] for t in topk_indices]
     return int(any([g in topk_indices for g in gold_list]))

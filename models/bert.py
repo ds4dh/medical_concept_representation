@@ -11,14 +11,18 @@ class BERT(nn.Module):
                  d_ff, n_layers, attn_type, dropout=0.1, n_heads=None,
                  *args, **kwargs):
         super().__init__()
+        self.pad_id = special_tokens['[PAD]']
+        self.bos_id = special_tokens['[CLS]']
+        self.eos_id = special_tokens['[END]']
         self.mask_id = special_tokens['[MASK]']
         self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
 
         # Embedding layer (sum of positional, segment and token embeddings)
+        self.max_seq_len = max_seq_len
         self.embedding = BERTEmbedding(vocab_size=vocab_sizes['total'],
                                        max_len=max_seq_len,
                                        d_embed=d_embed,
-                                       pad_id=special_tokens['[PAD]'])
+                                       pad_id=self.pad_id)
         
         # BERT layers
         assert not (attn_type == 'attention' and n_heads is None)
@@ -69,30 +73,30 @@ class BERT(nn.Module):
             if len(embedded.shape) > 1:  # ngram case
                 embedded = embedder.combine_ngram_embeddings(embedded, dim=-2)
             token_embeddings.append(embedded)
-        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
+        return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, mode='static'):
-        """ Compute contextualized embeddings for a sequence of tokens
+    def get_sequence_embeddings(self, sequence, mode='context_all'):
+        """ Compute embedding (static or contextualized) for a token sequence
         """
         if mode == 'static':
-            embedder = self.embedding
-            all_embeddings = embedder.tok.weight
-            embedded = []
-            for token_index in sequence:
-                embedded.append(all_embeddings[token_index])
-            # TODO: something like cat or stack, then weighted average
+            embedded = self.get_token_embeddings(sequence)
+            embedded = embedded.mean(dim=-2)  # TODO: weighted average
 
-        elif mode in ['context', 'cls']:
+        elif 'context' in mode:
             sequence = self.pre_process_for_embeddings(sequence)
             embedded = self.forward(sequence, get_embeddings=True)
-            if mode == 'context':
-                # TODO: frequency-weighted average
-                embedded = embedded.mean(dim=1)
-            else:
+            if mode == 'context_cls':
                 embedded = embedded[:, 0]  # '[CLS]' token embedding
-        return embedded.squeeze().detach().cpu().numpy()
+            elif mode == 'context_all':
+                embedded = embedded.mean(dim=-2)  # TODO: weighted average
+            else:
+                raise ValueError('Bad context mode for elmo')
+
+        return embedded.squeeze().detach().cpu()
     
     def pre_process_for_embeddings(self, sequence):
+        if len(sequence) > self.max_seq_len - 2:  # for eos / bos tokens
+            sequence = sequence[:self.max_seq_len - 2]  # rand ordered select?
         if isinstance(sequence[0], list):  # ngram case
             sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
             sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
@@ -223,13 +227,13 @@ class BERTEmbedding(nn.Module):
             segment_labels = torch.ones_like(sequence_for_lbls, dtype=torch.int)
 
         # For token_embeddings, sum over ngram dimension if existing
-        tok_embeddings = self.tok(sequence)
-        if len(tok_embeddings.shape) > 3:
+        tok_emb = self.tok(sequence)
+        if len(tok_emb.shape) > 3:
             # (batch, seq, ngram, d_embed) -> (batch, seq_len, d_embed)
-            tok_embeddings = self.combine_ngram_embeddings(tok_embeddings, dim=-2)
+            tok_emb = self.combine_ngram_embeddings(tok_emb, dim=-2)
         
         # Add position and segment embeddings
-        x = tok_embeddings + self.pos(sequence) + self.seg(segment_labels)
+        x = tok_emb + self.pos(sequence) + self.seg(segment_labels)
         return self.dropout(x)
 
     def combine_ngram_embeddings(self, x, dim, reduce='mean'):

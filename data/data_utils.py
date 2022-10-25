@@ -136,7 +136,7 @@ class DynamicBatcher(IterDataPipe):
     def trim_fn(self, list_or_int):
         """ Make sure a sequence does not go over the max number of tokens """
         if isinstance(list_or_int, list):
-            return list_or_int[:self.max_len]
+            return list_or_int[:self.max_len]  # or random ordered selection?
         else:
             return list_or_int  # sometimes, part of a sample is a label
             

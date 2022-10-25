@@ -51,8 +51,13 @@ class Glove(nn.Module):
             if len(embedded.shape) > 1:  # ngram case
                 embedded = self.combine_ngram_embeddings(embedded, dim=-2)
             token_embeddings.append(embedded)
-        return torch.stack(token_embeddings, dim=0).detach().cpu().numpy()
-
+        return torch.stack(token_embeddings, dim=0).detach().cpu()
+    
+    def get_sequence_embeddings(self, sequence):
+        """ Compute static embedding for a sequence of tokens
+        """
+        return self.get_token_embeddings(sequence).mean(dim=-2)  # TODO: weighted average
+        
 
 class GloveLoss(nn.Module):
     """ Loss for the GloVe Model
