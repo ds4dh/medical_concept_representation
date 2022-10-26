@@ -53,10 +53,20 @@ class Glove(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence):
+    def get_sequence_embeddings(self, sequence, weights=None):
         """ Compute static embedding for a sequence of tokens
         """
-        return self.get_token_embeddings(sequence).mean(dim=-2)  # TODO: weighted average
+        embeddings = self.get_token_embeddings(sequence)
+        return self.collapse_sequence_embeddings(embeddings, weights)
+    
+    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+        """ Average sequence embedding over sequence dimension
+        """
+        if weights == None:  # classic average
+            return embeddings.mean(dim=dim)
+        else:  # weighted average
+            weights = torch.tensor(weights, dtype=embeddings.dtype)
+            return embeddings.T @ weights / weights.sum()
         
 
 class GloveLoss(nn.Module):

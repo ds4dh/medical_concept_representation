@@ -3,8 +3,17 @@ from nltk.util import ngrams as ngram_base_fn
 
 
 class Tokenizer():
-    """
-    Word-level tokenizer.
+    """ Word-level tokenizer.
+        
+        Parameters
+        ----------
+        special_tokens (list of str)
+            tokens used in the model for unknown words, padding, masking,
+            starting/closing sentences, etc.
+        min_freq (int)
+            minimum frequency at which a word should occur in the corpus to have
+            its own token_id (else: token_id of '[UNK]')
+
     """
     def __init__(self, special_tokens, min_freq=0):
         self.encoder = dict(special_tokens)
@@ -30,6 +39,7 @@ class Tokenizer():
         # Store word count for every word (useful for skipgram dataset)
         self.word_counts = {self.encoder[word]: count for word, count in \
                             zip(word_vocab, sorted(word_counts)[::-1])}
+        self.word_counts.update({k: 1 for k in self.special_tokens.values()})
 
         # Decoder
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -57,20 +67,20 @@ class SubWordTokenizer():
 
         Parameters
         ----------
-        - ngram_min_len (int)
+        ngram_min_len (int)
             minimum length of ngrams in tokenized subwords
-        - ngram_max_len (int)
+        ngram_max_len (int)
             maximum length of ngrams in tokenized subwords
-        - special_tokens (list of str)
+        special_tokens (list of str)
             tokens used in the model for unknown words, padding, masking,
             starting/closing sentences, etc.
-        - min_freq (int)
+        min_freq (int)
             minimum frequency at which a word should occur in the corpus to have
             its own token_id (else: token_id of '[UNK]')
-        - brackets (list of 2 str)
+        brackets (list of 2 str)
             special characters used to differentiate similar words and subwords
             (e.g., word '<her>' vs subword 'her' subword word <where>)
-        - mode (str)
+        mode (str)
             how ngrams are computed ('subword' for classic ngrams, 'icd' for
             ngrams suited to icd codes (forward-only ngrams))
     
@@ -155,10 +165,11 @@ class SubWordTokenizer():
         len_so_far = len(self.encoder)
         self.encoder.update({word: (idx + len_so_far)
                              for idx, word in enumerate(word_vocab)})
-            
+
         # Store word count for every word (if not in char mode)
         self.word_counts = {self.encoder[word]: count for word, count in \
                             zip(word_vocab, sorted(word_counts)[::-1])}
+        self.word_counts.update({k: 1 for k in self.special_tokens.values()})
 
         # Update encoder with ngram level vocabulary
         len_so_far = len(self.encoder)

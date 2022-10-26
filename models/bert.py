@@ -75,35 +75,52 @@ class BERT(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, mode='context_all'):
+    def get_sequence_embeddings(self, sequence, weights=None, mode='context_avg'):
         """ Compute embedding (static or contextualized) for a token sequence
         """
         if mode == 'static':
             embedded = self.get_token_embeddings(sequence)
-            embedded = embedded.mean(dim=-2)  # TODO: weighted average
+            embedded = self.collapse_sequence_embeddings(embedded, weights)
 
         elif 'context' in mode:
-            sequence = self.pre_process_for_embeddings(sequence)
+            sequence = self.pre_process_for_sequence(sequence)
             embedded = self.forward(sequence, get_embeddings=True)
             if mode == 'context_cls':
                 embedded = embedded[:, 0]  # '[CLS]' token embedding
-            elif mode == 'context_all':
-                embedded = embedded.mean(dim=-2)  # TODO: weighted average
+            elif mode == 'context_avg':
+                embedded = self.collapse_sequence_embeddings(embedded, weights)
             else:
                 raise ValueError('Bad context mode for elmo')
 
         return embedded.squeeze().detach().cpu()
-    
-    def pre_process_for_embeddings(self, sequence):
-        if len(sequence) > self.max_seq_len - 2:  # for eos / bos tokens
-            sequence = sequence[:self.max_seq_len - 2]  # rand ordered select?
+
+    def pre_process_for_sequence(self, sequence):
+        """ Add [EOS]/[BOS] tokens, trim too lengthy sequences, tensorize
+        """
         if isinstance(sequence[0], list):  # ngram case
             sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
             sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
         else:
             sequence.insert(0, self.bos_id); sequence.append(self.eos_id)
+        if len(sequence) > self.max_seq_len:  # after adding [EOS], [BOS] tokens
+            sequence = sequence[:self.max_seq_len]
         return torch.tensor(sequence)[None, ...]  # add batch dimension
-
+    
+    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+        """ Average sequence embedding over sequence dimension
+        """
+        if len(embeddings.shape) > 2:  # context_avg case
+            if len(weights) > self.max_seq_len - 2:
+                embeddings = embeddings[0, 1:]
+                weights = weights[:self.max_seq_len - 1]
+            else:
+                embeddings = embeddings[0, 1:-1]
+        if weights == None:  # classic average
+            return embeddings.mean(dim=dim)
+        else:  # weighted average
+            weights = torch.tensor(weights, dtype=embeddings.dtype)
+            return embeddings.T @ weights / weights.sum()
+    
 
 class BertLoss(nn.Module):
     def __init__(self, mask_id, max_seq_len):

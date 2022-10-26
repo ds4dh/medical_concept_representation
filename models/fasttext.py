@@ -52,8 +52,13 @@ class FastText(nn.Module):
         """ Compute static embedding for a sequence of tokens
         """
         embeddings = self.get_token_embeddings(sequence)
+        return self.collapse_sequence_embeddings(embeddings, weights)
+    
+    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+        """ Average sequence embedding over sequence dimension
+        """
         if weights == None:  # classic average
-            return embeddings.mean(dim=-2)
+            return embeddings.mean(dim=dim)
         else:  # weighted average
             weights = torch.tensor(weights, dtype=embeddings.dtype)
             return embeddings.T @ weights / weights.sum()

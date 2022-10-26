@@ -106,7 +106,8 @@ class ELMO(nn.Module):
             embeddings.append(embedded.squeeze())
         return torch.stack(embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, mode='static'):
+    def get_sequence_embeddings(self,
+                                sequence, weights=None, mode='context_last'):
         """ Compute embedding (static or contextualized) for a token sequence
         """
         sequence = self.pre_process_for_sequence(sequence)
@@ -119,17 +120,29 @@ class ELMO(nn.Module):
                 embedded = embedded.mean(dim=0)  # static + all bi-lstm layers
             else:
                 raise ValueError('Bad context mode for elmo')
-        embedded = embedded.mean(dim=-2)  # TODO: weighted average over sequence
+        embedded = self.collapse_sequence_embeddings(embedded, weights)
         return embedded.squeeze().detach().cpu()
     
     def pre_process_for_sequence(self, sequence):
+        """ Add [EOS]/[BOS] tokens, trim too lengthy sequences, tensorize
+        """
         if isinstance(sequence[0], list):  # ngram case
             sequence.insert(0, [self.bos_id]); sequence.append([self.eos_id])
             sequence = list(zip(*zip_longest(*sequence, fillvalue=self.pad_id)))
         else:
             sequence.insert(0, self.bos_id); sequence.append(self.eos_id)
         return torch.tensor(sequence)[None, ...]  # add batch dimension
-        
+
+    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+        """ Average sequence embedding over sequence dimension
+        """
+        embeddings = embeddings[0, 1:-1]  # discard [BOS]/[EOS] token embeddings
+        if weights == None:  # classic average
+            return embeddings.mean(dim=dim)
+        else:  # weighted average
+            weights = torch.tensor(weights, dtype=embeddings.dtype)
+            return embeddings.T @ weights / weights.sum()
+
 
 class ELMOLoss(nn.Module):
     def __init__(self):
