@@ -52,19 +52,11 @@ class FastText(nn.Module):
         """ Compute static embedding for a sequence of tokens
         """
         embeddings = self.get_token_embeddings(sequence)
-        if weights == None:
+        if weights == None:  # classic average
             return embeddings.mean(dim=-2)
-        else:
-            return self.computed_weighted_average(sequence, embeddings, weights)
-    
-    def computed_weighted_average(self, sequence, embeddings, weights):
-        TODO: TEST THIS FUNCTION
-        if isinstance(sequence[0], list):
-            weights = [weights[t[0]] for t in sequence]
-        else:
-            weights = weights[sequence]  # check good behaviour
-        return embeddings @ weights / weights.sum()  # something like this
-        
+        else:  # weighted average
+            weights = torch.tensor(weights, dtype=embeddings.dtype)
+            return embeddings.T @ weights / weights.sum()
         
     def export_as_gensim(self, path, tokenizer):
         embeddings = self.get_embeddings()
@@ -73,6 +65,7 @@ class FastText(nn.Module):
                 f.write(str(tok) + ' ' + str(emb).replace('[', '') \
                                                  .replace(']', '') \
                                                  .replace(',', '') + '\n')
+
 
 class FastTextLoss(nn.Module):
     def __init__(self):

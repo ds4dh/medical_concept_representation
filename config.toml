@@ -3,7 +3,7 @@
   model_used = 'fasttext'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'word'  # 'word', 'subword', 'icd'
+  ngram_mode = 'subword'  # 'word', 'subword', 'icd'
   ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'

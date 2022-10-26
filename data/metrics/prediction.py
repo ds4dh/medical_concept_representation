@@ -32,7 +32,7 @@ def prediction_task_ehr(model, test_data_dir, tokenizer, cat='DIA_', topk=100):
 def get_label_emb(model, tokenizer, cat):
     vocab = tokenizer.get_vocab()
     labels = [tokenizer.encode(t) for t in vocab if cat in t and cat != t]
-    labels_emb = model.get_token_embeddings(labels)  # TODO: CHECK WITH ELMO WITH CAPS
+    labels_emb = model.get_token_embeddings(labels)
     return labels, labels_emb
 
 def get_gold_list(sequence, tokenizer, cat):
@@ -45,7 +45,11 @@ def get_gold_list(sequence, tokenizer, cat):
 
 def get_input_emb(model, sequence, tokenizer, cat):
     input_sequence = [tokenizer.encode(t) for t in sequence if cat not in t]
-    input_emb = model.get_sequence_embeddings(input_sequence)
+    if isinstance(input_sequence[0], list):
+        weights = [1 / tokenizer.word_counts[t[0]] for t in input_sequence]
+    else:
+        weights = [1 / tokenizer.word_counts[t] for t in input_sequence]
+    input_emb = model.get_sequence_embeddings(input_sequence, weights)
     return np.expand_dims(input_emb, axis=0)
 
 def cosine_hit(input_emb, labels_emb, labels, gold_list, topk):
