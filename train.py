@@ -41,7 +41,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         # THIS IS JUST TO TEST MY METRICS WITHOUT TRAINING A MODEL, WILL REMOVE
         # TODO: DEFINIR DANS PIPELINE UNE LISTE DE PARTIALS AVEC MODELE EN 1ER ARGUMENT
         import os
-        # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
+        metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         metrics.prediction_task_ehr(self.model,
                                     os.path.join(data_params['data_dir'],
                                                  data_params['data_subdir']),

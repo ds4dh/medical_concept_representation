@@ -4,40 +4,47 @@ matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
+all_colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'w'] * 10
 
-
-def clustering_task_ehr(model, tokenizer, n_dims=3, algorithm='pca'):
+def clustering_task_ehr(model, tokenizer):
     model.eval()  # may not be needed when used from test_fn
-    assert n_dims <= 3, 'Parameter n_dims must be at most 3.'
-    categories = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']
     fig = plt.figure()
-    for i, category in enumerate(categories):
+    for i, category in enumerate(['PRO_', 'DIA_', 'MED_']):
         
-        vocab = tokenizer.get_vocab()
-        tokens = [token for token in vocab
-                  if category in token and category != token]
-        token_indices = [tokenizer.encode(token) for token in tokens]
-        word_embeddings = model.get_token_embeddings(token_indices)
+        token_info = get_token_info(model, tokenizer, category)
+        reduced = compute_reduced_representation(token_info['embedded'])        
+        unique_initials = list(set(token_info['initials']))
+        unique_colors = all_colors[:len(unique_initials)]  # iter(plt.cm.rainbow(unique_linspace))
 
-        if algorithm == 'pca':
-            reduced = PCA().fit_transform(word_embeddings)[:, :n_dims]
-        elif algorithm == 'tsne':
-            params = {'learning_rate': 'auto', 'init': 'pca'}
-            reduced = TSNE(n_dims, **params).fit_transform(word_embeddings)
-        else:
-            raise ValueError('Invalid algorithm name (pca, tsne).')
-                
-        scatter_data = [reduced[:, i] for i in range(reduced.shape[-1])]
-        ax = fig.add_subplot(2, 3, i + 1, projection='3d')
-        ax.scatter(*scatter_data, edgecolors='k', c='r')
-        for word, coord in zip(tokens, reduced):
-            initial = word.split('_')[-1][0]  # to use for color coding
-            coord = [c + 0.05 for c in coord]
-            ax.text(*coord, word, fontsize=4)
+        kwargs = {} if reduced.shape[-1] <= 2 else {'projection': '3d'}
+        ax = fig.add_subplot(1, 3, i + 1, **kwargs)
+        for initial, color in zip(unique_initials, unique_colors):
+            sub_category_indices = np.where(token_info['initials'] == initial)
+            data = reduced[sub_category_indices]
+            data = [data[:, i] for i in range(data.shape[-1])]
+            ax.scatter(*data, c=color)  # , edgecolors='k')
+
+        # for word, coord in zip(token_info['tokens'], reduced):
+        #     initial = word.split('_')[-1][0]  # to use for color coding
+        #     coord = [c + 0.05 for c in coord]
+        #     ax.text(*coord, word, fontsize=4)
             
     plt.tight_layout()
     plt.show()
 
+def compute_reduced_representation(embeddings, algorithm='pca', n_dims=3):
+    if algorithm == 'pca':
+        return PCA().fit_transform(embeddings)[:, :n_dims]
+    elif algorithm == 'tsne':
+        params = {'learning_rate': 'auto', 'init': 'pca'}
+        return TSNE(n_dims, **params).fit_transform(embeddings)
+    else:
+        raise ValueError('Invalid algorithm name (pca, tsne).')
 
-def compute_closest_token(*args, **kwargs):
-    pass
+def get_token_info(model, tokenizer, cat):
+    vocab = tokenizer.get_vocab()
+    tokens = [token for token in vocab if cat in token and cat != token]
+    encoded = [tokenizer.encode(token) for token in tokens]
+    embeddings = model.get_token_embeddings(encoded)
+    initials = np.array([token.split('_')[-1][0] for token in tokens])
+    return {'tokens': tokens, 'embedded': embeddings, 'initials': initials}
