@@ -6,3 +6,4 @@ import numpy as np
 # TODO: Reranking: train an svm or a linear classifier that computes similarity
 #       between input (patient) embedding and searched output embeddings
 # IDEA: Train both search and reranking models jointly
+# IDEA: Do this not as a metric but as a reranker model trained on its own task
