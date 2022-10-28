@@ -107,7 +107,7 @@ class DynamicBatcher(IterDataPipe):
         sample_len_max = 0
         n_tokens_in_padded_batch = 0
         for sample in tqdm(self.dp, desc='Computing batch sizes', leave=False):
-            
+
             # Trim the sample in case it is longer than self.max_len
             if isinstance(sample, dict):
                 sample = {k: self.trim_fn(v) for k, v in sample.items()}

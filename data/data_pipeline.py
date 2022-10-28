@@ -66,11 +66,11 @@ class DataPipeline():
         """ Set the pipeline specific to the task of the model
         """
         if task == 'skipgram':
-            return tasks.SkipGramMaker(dp, self.tokenizer, self.data_fulldir, split)
+            return tasks.SkipGramMaker(dp, self.tokenizer)
         elif task == 'cooc':
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
         elif task in ['lm', 'mt', 'reagent_pred_mt']:
-            return tasks.LMSetter(dp, self.tokenizer)  # voir comment on fait
+            return tasks.LMSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
             return tasks.DynamicMasker(dp, self.tokenizer)
         elif task == 'reagent_pred_cls':
