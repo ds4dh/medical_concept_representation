@@ -28,6 +28,10 @@ def load_model_and_params_from_config(config_path):
     run_params = config['run']
     data_params = config['data']
     train_params = config['train']
+
+    # Check if n_epochs or n_steps is used
+    if train_params['n_epochs'] is not None:
+        train_params['n_steps'] = -1
     
     # Check ngram length and set unique model name for logs directory
     if run_params['ngram_mode'] == 'subword':
