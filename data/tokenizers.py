@@ -15,7 +15,7 @@ class Tokenizer():
             its own token_id (else: token_id of '[UNK]')
 
     """
-    def __init__(self, special_tokens, min_freq=0):
+    def __init__(self, special_tokens, min_freq=5):
         self.encoder = dict(special_tokens)
         self.special_tokens = dict(special_tokens)
         self.min_freq = min_freq
@@ -27,8 +27,8 @@ class Tokenizer():
         # Compute and sort vocabulary
         word_vocab, word_counts = np.unique(words, return_counts=True)
         if self.min_freq > 0:  # remove rare words
-            word_vocab = word_vocab[word_counts > self.min_freq]
-            word_counts = word_counts[word_counts > self.min_freq]
+            word_vocab = word_vocab[word_counts >= self.min_freq]
+            word_counts = word_counts[word_counts >= self.min_freq]
         inds = word_counts.argsort()[::-1]
         word_vocab = word_vocab[inds]
 
@@ -87,7 +87,7 @@ class SubWordTokenizer():
     """
     def __init__(self, ngram_min_len, ngram_max_len, ngram_mode,
                  ngram_base_prefixes, ngram_base_suffixes, special_tokens,
-                 min_freq=0, brackets=['<', '>']):
+                 min_freq=5, brackets=['<', '>']):
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
         assert ngram_min_len >= 0 and ngram_max_len >= ngram_min_len
@@ -145,8 +145,8 @@ class SubWordTokenizer():
     def _compute_and_sort_vocabulary(self, words_or_ngrams):
         vocab, counts = np.unique(words_or_ngrams, return_counts=True)
         if self.min_freq > 0:  # remove rare words
-            vocab = vocab[counts > self.min_freq]
-            counts = counts[counts > self.min_freq]
+            vocab = vocab[counts >= self.min_freq]
+            counts = counts[counts >= self.min_freq]
         inds = counts.argsort()[::-1]  # most occurent first
         return vocab[inds], counts[inds]
         

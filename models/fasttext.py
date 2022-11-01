@@ -1,16 +1,99 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
-class FastText(nn.Module): 
+class Fasttext(nn.Module):
+
+    def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
+        super(Fasttext, self).__init__()
+        vocab_size = vocab_sizes['total']
+        pad_id = special_tokens['[PAD]']
+        self.loss_fn = FastTextLoss()
+
+        self.center_embeddings = \
+            nn.Embedding(vocab_size, d_embed, sparse=True, padding_idx=pad_id)
+        self.contxt_embeddings = \
+            nn.Embedding(vocab_size, d_embed, sparse=True, padding_idx=pad_id)
+
+        bounds = 1.0 / d_embed
+        nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
+        nn.init.constant_(self.contxt_embeddings.weight.data, 0)
+
+    def forward(self, pos_center, pos_context, neg_context):
+        center = self.center_embeddings(pos_center)
+        contxt = self.contxt_embeddings(pos_context)
+        contxt_neg = self.contxt_embeddings(neg_context)
+
+        if len(center.shape) > 2:  # sum over [word + subwords] dim
+            center = self.combine_ngram_embeddings(center, dim=-2)
+            contxt = self.combine_ngram_embeddings(contxt, dim=-2)
+            contxt_neg = self.combine_ngram_embeddings(contxt_neg, dim=-2)
+        
+        return {'center': center, 'contxt': contxt, 'contxt_neg': contxt_neg}
+
+    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+        if reduce == 'mean':
+            norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
+            return x.mean(dim=dim) / norm_factor
+        else:
+            return x.sum(dim=dim)
+    
+    def get_token_embeddings(self, token_indices):
+        """ Compute static embeddings for a list of tokens
+        """
+        all_embeddings = self.u_embeddings.weight
+        token_embeddings = []
+        for token_index in token_indices:
+            embedded = all_embeddings[token_index]
+            if len(embedded.shape) > 1:  # ngram case
+                embedded = self.combine_ngram_embeddings(embedded, dim=-2)
+            token_embeddings.append(embedded)
+        return torch.stack(token_embeddings, dim=0).detach().cpu()
+    
+    def get_sequence_embeddings(self, sequence, weights=None):
+        """ Compute static embedding for a sequence of tokens
+        """
+        embeddings = self.get_token_embeddings(sequence)
+        return self.collapse_sequence_embeddings(embeddings, weights)
+    
+    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+        """ Average sequence embedding over sequence dimension
+        """
+        if weights == None:  # classic average
+            return embeddings.mean(dim=dim)
+        else:  # weighted average
+            weights = torch.tensor(weights, dtype=embeddings.dtype)
+            return embeddings.T @ weights / weights.sum()
+            
+
+class FastTextLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, model_output, *args, **kwargs):  # args and kwargs necessary?
+        center = model_output['center']
+        contxt = model_output['contxt']
+        contxt_neg = model_output['contxt_neg']
+        
+        score = torch.sum(torch.mul(center, contxt), dim=1)
+        score = torch.clamp(score, max=10, min=-10)
+        score = -F.logsigmoid(score)
+
+        neg_score = torch.bmm(contxt_neg, center.unsqueeze(2)).squeeze()
+        neg_score = torch.clamp(neg_score, max=10, min=-10)
+        neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
+
+        return torch.mean(score + neg_score)
+
+
+class FastTextOld(nn.Module): 
     def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
         super().__init__()
-        assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
-        self.pad_id = special_tokens['[PAD]']
         vocab_size = vocab_sizes['total']
         self.embed = nn.Embedding(vocab_size, d_embed)
         self.fc = nn.Linear(d_embed, vocab_size)
-        self.loss_fn = FastTextLoss()
+        self.loss_fn = FastTextLossOld()
 
     def forward(self, center):
         """ Forward pass of the FastText model
@@ -72,7 +155,7 @@ class FastText(nn.Module):
                                                  .replace(',', '') + '\n')
 
 
-class FastTextLoss(nn.Module):
+class FastTextLossOld(nn.Module):
     def __init__(self):
         super().__init__()
         self.log_softmax = nn.LogSoftmax(dim=-1)
