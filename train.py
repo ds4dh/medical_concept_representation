@@ -1,7 +1,7 @@
 import argparse
 import models
 import data
-import data.metrics as metrics
+import metrics
 import pytorch_lightning as pl
 import train_utils
 from torch.utils.data import DataLoader
@@ -59,16 +59,16 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Compute loss and other metrics that may be defined in the model
         loss = self.model.loss_fn(outputs, **labels)
         returned = {'loss': loss}
-        if hasattr(self.model, '%s_metric' % mode):
+        if hasattr(self.model, '%s_metric' % mode):  # should remove this
             metric_fn = getattr(self.model, '%s_metric' % mode)
             returned.update(metric_fn(logger=self.logger.experiment,
                                       batch_idx=batch_idx,
                                       step=self.global_step,
                                       outputs=outputs,
                                       **labels))
-        
+                
         # Log loss and other metrics, and return them to the pl-module
-        btch_sz = outputs.size(0)
+        btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
         for k, v in returned.items():
             self.log('%s_%s' % (mode, k), v.cpu().detach(), batch_size=btch_sz)
         return returned
@@ -138,6 +138,10 @@ def main():
     """ Wrap a pytorch-ligthning module around a model and the corresponding
         data, and train the model to perform a model-specific task
     """
+
+    import cProfile
+    import pstats
+
     # Load checkpoint path if needed (set to None if no checkpoint)
     ckpt_path, log_dir, new_model_version = \
         models.load_checkpoint(model_params['model_name'], **run_params)
@@ -183,9 +187,13 @@ def main():
                          logger=logger)
     
     # Train, then test model
-    trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
+    with cProfile.Profile() as pr:
+        trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
+        # trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
 
+    stats = pstats.Stats(pr)
+    stats.sort_stats(pstats.SortKey.TIME)
+    stats.dump_stats(filename='profiling.prof')
 
 if __name__ == '__main__':
     main()
