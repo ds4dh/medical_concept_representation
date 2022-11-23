@@ -66,7 +66,7 @@ class PytorchLightningWrapper(pl.LightningModule):
                                       step=self.global_step,
                                       outputs=outputs,
                                       **labels))
-                
+
         # Log loss and other metrics, and return them to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
         for k, v in returned.items():
@@ -138,10 +138,6 @@ def main():
     """ Wrap a pytorch-ligthning module around a model and the corresponding
         data, and train the model to perform a model-specific task
     """
-
-    import cProfile
-    import pstats
-
     # Load checkpoint path if needed (set to None if no checkpoint)
     ckpt_path, log_dir, new_model_version = \
         models.load_checkpoint(model_params['model_name'], **run_params)
@@ -187,13 +183,9 @@ def main():
                          logger=logger)
     
     # Train, then test model
-    with cProfile.Profile() as pr:
-        trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-        # trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
+    trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
+    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
 
-    stats = pstats.Stats(pr)
-    stats.sort_stats(pstats.SortKey.TIME)
-    stats.dump_stats(filename='profiling.prof')
 
 if __name__ == '__main__':
     main()
