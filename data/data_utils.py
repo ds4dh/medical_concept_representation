@@ -1,7 +1,7 @@
 import json
-import pickle
 import torch
-from tqdm import tqdm
+import uuid
+import random
 from functools import partial
 from itertools import zip_longest
 from torchdata.datapipes.iter import (
@@ -10,20 +10,9 @@ from torchdata.datapipes.iter import (
     Filter,
     FileOpener,
     LineReader,
-    UnBatcher,
-    BucketBatcher,
+    Shuffler,
+    MaxTokenBucketizer,
 )
-
-
-def save_dp(dp, save_path):
-    with open(save_path, 'wb') as handle:
-        pickle.dump(dp, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-
-def load_dp(load_path):
-    with open(load_path, 'rb') as file:
-        saved_dp = pickle.load(file)
-        return saved_dp
 
 
 class JsonReader(IterDataPipe):
@@ -76,86 +65,59 @@ class Encoder(IterDataPipe):
         return [self.tokenizer.encode(word) for word in sample]
         
 
-class DynamicBatcher(IterDataPipe):
-    """ Combine bucket-batching (batching by groups of sequences with similar
-        length) with token-batching (batching based on number of input tokens).
-        
-        - BucketBatcher creates batches taken from buckets of sequences sorted
-            by length, while keeping some randomness using many buckets
-        - UnBatcher undo the batching but keeps the order of the sentences
-        - DynamicBatcher implements dynamic batching by setting the batch size
-            of each batch so that n_tokens per batch < max_tokens
-        - DynamicBatcher also trims sequences longer than max_seq_len
-        
-    """
-    def __init__(self, dp, max_tokens, max_len, drop_last=True):
-        super().__init__()
-        self.max_tokens = max_tokens
-        self.max_len = max_len
-        self.drop_last = drop_last
-        bucket_params = {'batch_size': 1024,
-                         'batch_num': 128,
-                         'bucket_num': 8,
-                         'use_in_batch_shuffle': False,
-                         'sort_key': self.sort_fn}
-        dp = BucketBatcher(dp, **bucket_params)
-        dp = UnBatcher(dp)
+class Trimer(IterDataPipe):
+    def __init__(self, dp, max_len):
         self.dp = dp
-        
+        self.max_len = max_len
+    
     def __iter__(self):
-        batch = []
-        sample_len_max = 0
-        n_tokens_in_padded_batch = 0
-        for sample in tqdm(self.dp, desc='Computing batch sizes', leave=False):
-
-            # Trim the sample in case it is longer than self.max_len
+        for sample in self.dp:
             if isinstance(sample, dict):
-                sample = {k: self.trim_fn(v) for k, v in sample.items()}
+                yield {k: self.trim_fn(v) for k, v in sample.items()}
             else:
-                sample = self.trim_fn(sample)
-            
-            # Compute number of tokens in the batch if this sample were added
-            sample_len = self.len_fn(sample, method='sum')
-            sample_len_max = max(sample_len_max, sample_len)
-            n_tokens_in_padded_batch = sample_len_max * len(batch)
-                       
-            # Yield the batch if this number is over the max number of tokens
-            if n_tokens_in_padded_batch > self.max_tokens:
-                yield batch
-                batch = []
-                sample_len_max = sample_len
-                n_tokens_in_padded_batch = sample_len
-                
-            # Add the sample to the batch (add to empty list if just yielded)
-            batch.append(sample)
-        
-        # Yield the last batch (or not)
-        if not self.drop_last:
-            yield batch
+                yield self.trim_fn(sample)
     
     def trim_fn(self, list_or_int):
         """ Make sure a sequence does not go over the max number of tokens """
         if isinstance(list_or_int, list):
             return list_or_int[:self.max_len]  # or random ordered selection?
         else:
-            return list_or_int  # sometimes, part of a sample is a label
-            
-    def sort_fn(self, bucket):
-        """ Sort samples using a length metric given by len_fn """
-        return sorted(bucket, key=self.len_fn)  # takes default args of len_fn
+            return list_or_int  # sometimes, part of a sample is a label 
+
+
+class CustomBatcher(IterDataPipe):
+    """ Batche samples dynamically, so that each batch size < max_tokens
+        Also trim sequences > max_len and provide variability by shuffling
+        The unique logic is there to prevent a bug (?) in MaxTokenBucketizer
+    """
+    def __init__(self, dp, max_tokens, max_len, shuffle=True):
+        self.unique_table = (0.01 * torch.rand((int(1e7),)).unique()).tolist()
+        self.unique_cursor = 0
+        dp = Trimer(dp, max_len)
+        if shuffle: dp = Shuffler(dp)
+        dp = MaxTokenBucketizer(datapipe=dp,
+                                max_token_count=max_tokens,
+                                len_fn=self.len_fn,
+                                buffer_size=96,  # not too large for variability
+                                include_padding=True)
+        if shuffle: dp = Shuffler(dp)
+        dp = DictUnzipper(dp)
+        self.dp = dp
     
-    def len_fn(self, sample, method='first'):
-        """ Compute sample length given a method to compute it. The method
-            'first' uses only the first dict value to compute length.
+    def __iter__(self):
+        for sample in self.dp:
+            yield sample
+            
+    def len_fn(self, sample):
+        """ Compute sample length (given data type, apply different method)
+            Note that the length is made unique to avoid an issue in torchdata
         """
-        length = 0
         if isinstance(sample, dict):
-            for key in sample.keys():
-                length += self.compute_len(sample[key])
-                if method == 'first':
-                    break  # note: dicts are insertion-ordered for python 3.7+
+            length = sum([self.compute_len(sample[k]) for k in sample.keys()])
         else:
-            length += self.compute_len(sample)
+            length = self.compute_len(sample)
+        length += self.unique_table[self.unique_cursor]
+        self.unique_cursor = (self.unique_cursor + 1) % len(self.unique_table)
         return length
     
     @staticmethod
@@ -184,7 +146,7 @@ class DictUnzipper(IterDataPipe):
     def __iter__(self):
         for batch in self.dp:
             if self.data_keys == None:
-                self.data_keys = batch[0].keys()
+                self.data_keys = list(batch[0].keys())
             yield {key: [s[key] for s in batch] for key in self.data_keys}
 
 

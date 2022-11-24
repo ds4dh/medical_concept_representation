@@ -184,8 +184,22 @@ def main():
     
     # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
+    # trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
 
 
 if __name__ == '__main__':
-    main()
+    time_with_profiler = False
+    if time_with_profiler:
+        import cProfile
+        import pstats
+        with cProfile.Profile() as pr:
+            main()
+        stats = pstats.Stats(pr)
+        stats.sort_stats(pstats.SortKey.TIME)
+        # stats.dump_stats(filename='profiling.prof')    
+        stats.print_stats()
+    else:
+        import time
+        t0 = time.time()
+        main()
+        print(time.time() - t0)

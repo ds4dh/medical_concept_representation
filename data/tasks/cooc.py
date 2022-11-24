@@ -1,9 +1,9 @@
 import os
 import numpy as np
+import pickle
 from tqdm import tqdm
 from collections import OrderedDict
 from torchdata.datapipes.iter import IterDataPipe
-from ..data_utils import load_dp, save_dp
 
 
 class CoocMaker(IterDataPipe):
@@ -14,13 +14,13 @@ class CoocMaker(IterDataPipe):
         super().__init__()
         save_or_load_path = os.path.join(data_dir, f'cooc_{split}')
         if load_data:
-            self.dp = load_dp(save_or_load_path)
+            self.dp = self.load_dp(save_or_load_path)
         else:
             raw_cooc = self.create_cooc(list(dp))
             filtered_cooc = self.filter_cooc(raw_cooc)
             self.dp = self.format_cooc(filtered_cooc, tokenizer)
             if 0:
-                save_dp(self.dp, save_or_load_path)
+                self.save_dp(self.dp, save_or_load_path)
         
     def __iter__(self):
         """ Sample format: {'left': token_id (int) or ngram (list of ints),
@@ -82,3 +82,14 @@ class CoocMaker(IterDataPipe):
                                 'cooc': float(cooc_i)})
         
         return samples
+
+    @staticmethod
+    def save_dp(dp, save_path):
+        with open(save_path, 'wb') as handle:
+            pickle.dump(dp, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    @staticmethod
+    def load_dp(load_path):
+        with open(load_path, 'rb') as file:
+            saved_dp = pickle.load(file)
+            return saved_dp

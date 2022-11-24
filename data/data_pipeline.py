@@ -2,7 +2,6 @@ import os
 import data
 import data.tasks as tasks
 from tqdm import tqdm
-from torchdata.datapipes.iter import Shuffler
 from itertools import chain
 
 
@@ -10,14 +9,13 @@ class DataPipeline():
     """ General pipeline for a dataset of word / code sequences
     """
     def __init__(self, data_params, run_params, train_params, model_params):
-        # Data parameters
+        # Data and model parameters
         self.data_fulldir = os.path.join(data_params['data_dir'],
                                          data_params['data_subdir'])
         self.max_seq_len = data_params['max_seq_len']
         self.debug = run_params['debug']  # smaller dataset for training
-        if 'n_classes' in model_params.keys():
-            self.n_classes = model_params['n_classes']
-        
+        self.model_params = model_params  # useful for some pipelines
+
         # Load tokenizer and train it
         self.max_tokens = train_params['max_tokens_per_batch']
         self.tokenizer = self.get_tokenizer(model_params, run_params)
@@ -33,15 +31,12 @@ class DataPipeline():
             print(' - Using validation data for training in debug mode.')
             split = 'val'
         
-        # Build task-specific pipeline        
+        # Build task-specific pipeline
         dp = data.JsonReader(self.data_fulldir, split)
         dp = self.select_parse_pipeline(dp, task)
         dp = data.Encoder(dp, self.tokenizer)
         dp = self.select_task_pipeline(dp, task, split)
-        if shuffle: dp = Shuffler(dp)
-        dp = data.DynamicBatcher(dp, self.max_tokens, self.max_seq_len)
-        dp = data.DictUnzipper(dp)
-        if shuffle: dp = Shuffler(dp)
+        dp = data.CustomBatcher(dp, self.max_tokens, self.max_seq_len, shuffle)
         dp = data.TorchPadder(dp, self.tokenizer)
         return dp
     
@@ -55,10 +50,11 @@ class DataPipeline():
         elif task == 'reagent_pred_mlm':
             return tasks.ReagentPredParser(dp, task)
         elif task == 'reagent_pred_cls':
-            return tasks.ReagentPredParser(dp,
-                                           task=task,
-                                           data_dir=self.data_fulldir,
-                                           n_classes=self.n_classes)
+            return tasks.ReagentPredParser(
+                                    dp,
+                                    task=task,
+                                    data_dir=self.data_fulldir,
+                                    n_classes=self.model_params['n_classes'])
         else:
             raise Exception('Invalid task given to the pipeline %s' % task)
         
