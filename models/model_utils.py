@@ -30,8 +30,10 @@ def load_model_and_params_from_config(config_path):
     train_params = config['train']
 
     # Check if n_epochs or n_steps is used
-    if train_params['n_epochs'] is not None:
+    if train_params['n_epochs'] > 0:
         train_params['n_steps'] = -1
+    else:
+        train_params['n_epochs'] = None  # for pytorch lightning
     
     # Check ngram length and set unique model name for logs directory
     if run_params['ngram_mode'] == 'subword':
@@ -208,5 +210,5 @@ def set_environment(num_workers):
     if num_workers > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
     accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
-    devices = 1 if accelerator == 'gpu' else num_workers
+    devices = 1 if accelerator == 'gpu' else 'auto'
     return accelerator, devices

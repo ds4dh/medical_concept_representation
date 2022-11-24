@@ -3,114 +3,35 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# class FastText(nn.Module):
+# Adapted from https://github.com/Andras7/word2vec-pytorch
+class FastText(nn.Module):
 
-#     def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
-#         super(FastText, self).__init__()
-#         vocab_size = vocab_sizes['total']
-#         pad_id = special_tokens['[PAD]']
-#         self.loss_fn = FastTextLoss()
-
-#         self.center_embeddings = \
-#             nn.Embedding(vocab_size, d_embed, sparse=True, padding_idx=pad_id)
-#         self.contxt_embeddings = \
-#             nn.Embedding(vocab_size, d_embed, sparse=True, padding_idx=pad_id)
-
-#         bounds = 1.0 / d_embed
-#         nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
-#         nn.init.constant_(self.contxt_embeddings.weight.data, 0)
-
-#     def forward(self, pos_center, pos_context, neg_context):
-#         center = self.center_embeddings(pos_center)
-#         contxt = self.contxt_embeddings(pos_context)
-#         contxt_neg = self.contxt_embeddings(neg_context)
-
-#         if len(center.shape) > 2:  # sum over [word + subwords] dim
-#             center = self.combine_ngram_embeddings(center, dim=-2)
-#             contxt = self.combine_ngram_embeddings(contxt, dim=-2)
-#             contxt_neg = self.combine_ngram_embeddings(contxt_neg, dim=-2)
-        
-#         return {'center': center, 'contxt': contxt, 'contxt_neg': contxt_neg}
-
-#     def combine_ngram_embeddings(self, x, dim, reduce='mean'):
-#         if reduce == 'mean':
-#             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
-#             return x.mean(dim=dim) / norm_factor
-#         else:
-#             return x.sum(dim=dim)
-    
-#     def get_token_embeddings(self, token_indices):
-#         """ Compute static embeddings for a list of tokens
-#         """
-#         all_embeddings = self.u_embeddings.weight
-#         token_embeddings = []
-#         for token_index in token_indices:
-#             embedded = all_embeddings[token_index]
-#             if len(embedded.shape) > 1:  # ngram case
-#                 embedded = self.combine_ngram_embeddings(embedded, dim=-2)
-#             token_embeddings.append(embedded)
-#         return torch.stack(token_embeddings, dim=0).detach().cpu()
-    
-#     def get_sequence_embeddings(self, sequence, weights=None):
-#         """ Compute static embedding for a sequence of tokens
-#         """
-#         embeddings = self.get_token_embeddings(sequence)
-#         return self.collapse_sequence_embeddings(embeddings, weights)
-    
-#     def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
-#         """ Average sequence embedding over sequence dimension
-#         """
-#         if weights == None:  # classic average
-#             return embeddings.mean(dim=dim)
-#         else:  # weighted average
-#             weights = torch.tensor(weights, dtype=embeddings.dtype)
-#             return embeddings.T @ weights / weights.sum()
-            
-
-# class FastTextLoss(nn.Module):
-#     def __init__(self):
-#         super().__init__()
-
-#     def forward(self, model_output, *args, **kwargs):  # args and kwargs necessary?
-#         center = model_output['center']
-#         contxt = model_output['contxt']
-#         contxt_neg = model_output['contxt_neg']
-        
-#         score = torch.sum(torch.mul(center, contxt), dim=1)
-#         score = torch.clamp(score, max=10, min=-10)
-#         score = -F.logsigmoid(score)
-
-#         neg_score = torch.bmm(contxt_neg, center.unsqueeze(2)).squeeze()
-#         neg_score = torch.clamp(neg_score, max=10, min=-10)
-#         neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
-
-#         return torch.mean(score + neg_score)
-
-
-class FastText(nn.Module): 
     def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
-        super().__init__()
+        super(FastText, self).__init__()
         vocab_size = vocab_sizes['total']
-        self.embed = nn.Embedding(vocab_size, d_embed)
-        self.fc = nn.Linear(d_embed, vocab_size)
+        pad_id = special_tokens['[PAD]']
         self.loss_fn = FastTextLoss()
 
-    def forward(self, center):
-        """ Forward pass of the FastText model
+        self.center_embeddings = \
+            nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
+        self.context_embeddings = \
+            nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
 
-        Args:
-            center (torch.Tensor): center word whose context is to be predicted
-            - shape: (batch_size) if word-level encoding
-                     (batch_size, N > 1) if subword-level encoding
+        bounds = 1.0 / d_embed
+        nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
+        nn.init.constant_(self.context_embeddings.weight.data, 0)
 
-        Returns:
-            torch.Tensor of shape (batch_size, vocab_size): context word logits
-            
-        """
-        y = self.embed(center)  # (batch_size [, n_subwords + 1], d_embed)
-        if len(y.shape) > 2:  # sum over [word + subwords] dim
-            y = self.combine_ngram_embeddings(y, dim=-2)
-        return self.fc(y)  # (batch_size, vocab_size)
+    def forward(self, pos_center, pos_context, neg_context):
+        pos_center = self.center_embeddings(pos_center)
+        pos_context = self.context_embeddings(pos_context)
+        neg_context = self.context_embeddings(neg_context)
+
+        if len(pos_center.shape) > 2:  # ngram case (mean over word+subword dim)
+            pos_center = self.combine_ngram_embeddings(pos_center, dim=-2)
+
+        return {'pos_center': pos_center,
+                'pos_context': pos_context,
+                'neg_context': neg_context}
 
     def combine_ngram_embeddings(self, x, dim, reduce='mean'):
         if reduce == 'mean':
@@ -120,9 +41,9 @@ class FastText(nn.Module):
             return x.sum(dim=dim)
     
     def get_token_embeddings(self, token_indices):
-        """ Compute static embeddings for a list of tokens
+        """ Compute static embeddings each token in a list
         """
-        all_embeddings = self.embed.weight
+        all_embeddings = self.u_embeddings.weight
         token_embeddings = []
         for token_index in token_indices:
             embedded = all_embeddings[token_index]
@@ -132,36 +53,38 @@ class FastText(nn.Module):
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
     def get_sequence_embeddings(self, sequence, weights=None):
-        """ Compute static embedding for a sequence of tokens
+        """ Compute static embedding of a token sequence
         """
         embeddings = self.get_token_embeddings(sequence)
         return self.collapse_sequence_embeddings(embeddings, weights)
     
     def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
         """ Average sequence embedding over sequence dimension
+            Each token in the sentence is weighted by inverse term frequency
         """
         if weights == None:  # classic average
             return embeddings.mean(dim=dim)
         else:  # weighted average
             weights = torch.tensor(weights, dtype=embeddings.dtype)
             return embeddings.T @ weights / weights.sum()
-        
-    def export_as_gensim(self, path, tokenizer):
-        embeddings = self.get_embeddings()
-        with open(path, 'w', encoding='utf-8') as f:
-            for tok, emb in zip(tokenizer.encoder.keys(), embeddings.tolist()):
-                f.write(str(tok) + ' ' + str(emb).replace('[', '') \
-                                                 .replace(']', '') \
-                                                 .replace(',', '') + '\n')
-
+            
 
 class FastTextLoss(nn.Module):
+
     def __init__(self):
         super().__init__()
-        self.log_softmax = nn.LogSoftmax(dim=-1)
-        self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, context):
-        logits = self.log_softmax(model_output)
-        return self.nlll_loss(logits, context)
-    
+    def forward(self, model_output, *args, **kwargs):
+        pos_center = model_output['pos_center']
+        pos_context = model_output['pos_context']
+        neg_context = model_output['neg_context']
+        
+        score = torch.sum(torch.mul(pos_center, pos_context), dim=1)
+        score = torch.clamp(score, max=10, min=-10)
+        score = -F.logsigmoid(score)
+
+        neg_score = torch.bmm(neg_context, pos_center.unsqueeze(2)).squeeze()
+        neg_score = torch.clamp(neg_score, max=10, min=-10)
+        neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
+
+        return torch.mean(score + neg_score)
