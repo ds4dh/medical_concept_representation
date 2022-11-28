@@ -21,7 +21,7 @@ class Tokenizer():
         self.min_freq = min_freq
 
     def fit(self, words):
-        print('Training tokenizer')
+        print(' - Training tokenizer')
         assert isinstance(words, list)
         
         # Compute and sort vocabulary
@@ -44,10 +44,11 @@ class Tokenizer():
         # Decoder
         self.decoder = {v: k for k, v in self.encoder.items()}
         
-        # Store useful parameters of the tokenizer
+        # Store and print tokenizer vocabulary information
         self.vocab_sizes = {'total': len(self.encoder),
                             'special': len(self.special_tokens),
                             'word': len(word_vocab)}
+        print(' - Vocabulary sizes: %s' % self.vocab_sizes)
         
     def encode(self, word):
         try:
@@ -180,11 +181,12 @@ class SubWordTokenizer():
         self.decoder = {v: k if k not in word_vocab else k[1:-1]
                         for k, v in self.encoder.items()}
 
-        # Store useful parameters of the tokenizer
+        # Store and print tokenizer vocabulary information
         self.vocab_sizes = {'total': len(self.encoder),
                             'special': len(self.special_tokens),
                             'word': len(word_vocab),
                             'ngram': len(ngram_vocab)}
+        print(' - Vocabulary sizes: %s' % self.vocab_sizes)
         
     def encode(self, word):
         # Generate n-grams and add them to the word (if not in char mode)

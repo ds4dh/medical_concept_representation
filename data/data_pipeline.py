@@ -77,6 +77,7 @@ class DataPipeline():
     def get_tokenizer(self, model_params, run_params):
         """ Load and train a tokenizer with / without ngrams
         """
+        print('Setting up tokenizer')
         # Load the tokenizer
         if run_params['ngram_mode'] == 'word':
             tokenizer = data.Tokenizer(model_params['special_tokens'])
@@ -103,7 +104,7 @@ class DataPipeline():
         
         # Train the tokenizer with the training data (validation if debug mode)
         tokenizer_training_batches = []
-        for sample in tqdm(dp, desc='Building data to train tokenizer'):
+        for sample in tqdm(dp, desc=' - Building data to train the tokenizer'):
             if isinstance(sample, dict):  # avoid taking label indices as tokens
                 sample = {k: v for k, v in sample.items() if 'label' not in k}
                 sample = list(chain(*list(sample.values())))

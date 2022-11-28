@@ -91,7 +91,7 @@ class CustomBatcher(IterDataPipe):
         The unique logic is there to prevent a bug (?) in MaxTokenBucketizer
     """
     def __init__(self, dp, max_tokens, max_len, shuffle=True):
-        self.unique_table = (0.01 * torch.rand((int(1e7),)).unique()).tolist()
+        self.unique_table = torch.arange(0, 1 - 6e-8, 6e-8).tolist()  # problem
         self.unique_cursor = 0
         dp = Trimer(dp, max_len)
         if shuffle: dp = Shuffler(dp)

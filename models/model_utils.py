@@ -15,7 +15,6 @@ def load_model_and_params_from_config(config_path):
     Returns:
     --------
         model (nn.Module child): the model that is used for this run
-        model_name (str): unique identifier for the model
         run_params (dict): general parameters about the simulation
         data_params (dict): parameters about where the data is, etc.
         train_params (dict): learning, optimizers, etc.
@@ -56,14 +55,14 @@ def load_model_and_params_from_config(config_path):
     
     # Update bert classifier parameters if used
     if model_used == 'bert_classifier':
-        update_class_info(data_params, model_params)
-        update_bert_params(config, model_name, model_params)
+        update_class_info_for_bert_classifier(data_params, model_params)
+        update_params_for_bert_classifier(config, model_name, model_params)
     
     # Send the model and all parameterss to the main script
     return model, run_params, data_params, train_params, model_params
 
 
-def update_class_info(data_params, model_params):
+def update_class_info_for_bert_classifier(data_params, model_params):
     """ Update data and bert classifier parameters with class information
         TODO: put all this (specific to task, e.g., here, reagent prediction)
         TODO: in data/task/parsing (but hard because model loss_fn need update)
@@ -85,7 +84,7 @@ def update_class_info(data_params, model_params):
             model_params['n_classes'] = len(dicts)
             
 
-def update_bert_params(config, model_name, model_params):
+def update_params_for_bert_classifier(config, model_name, model_params):
     """ Update parameters of bert classifier with parameters of bert    
     """
     # Try to find the corresponding BERT model ckpt for the BERT classifier
