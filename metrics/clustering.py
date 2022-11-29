@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib
-matplotlib.use('tkagg')
+# matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
@@ -59,3 +59,5 @@ def get_token_info(model, tokenizer, cat):
     embeddings = model.get_token_embeddings(encoded)
     initials = np.array([token.split('_')[-1][pos] for token in tokens])
     return {'tokens': tokens, 'embedded': embeddings, 'initials': initials}
+
+clustering_task_ehr(model, tokenizer)

@@ -25,3 +25,8 @@ Build a genetic algorithm that sends a boolean vector request to the dataset pip
 
 #### (3) Test metric (Alban)
 For each model, code a test metric function that extracts embeddings from the test set (using input without diagnoses) and performs diagnose prediction using the minimal cosine distance.
+
+
+## Instructions 
+### setup 
+> conda env create -f environment.yml 
