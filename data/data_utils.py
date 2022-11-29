@@ -1,7 +1,6 @@
 import json
 import torch
-import uuid
-import random
+from collections import OrderedDict
 from functools import partial
 from itertools import zip_longest
 from torchdata.datapipes.iter import (
@@ -63,7 +62,7 @@ class Encoder(IterDataPipe):
         """ Tokenize a list of words using the tokenizer """
         assert isinstance(sample, list), 'Bad input type %s' % type(sample)
         return [self.tokenizer.encode(word) for word in sample]
-        
+
 
 class Trimer(IterDataPipe):
     def __init__(self, dp, max_len):
@@ -78,11 +77,36 @@ class Trimer(IterDataPipe):
                 yield self.trim_fn(sample)
     
     def trim_fn(self, list_or_int):
-        """ Make sure a sequence does not go over the max number of tokens """
+        """ Make sure a sequence does not go over the max number of tokens
+        """
         if isinstance(list_or_int, list):
             return list_or_int[:self.max_len]  # or random ordered selection?
         else:
             return list_or_int  # sometimes, part of a sample is a label 
+
+
+class DictCustomizer(IterDataPipe):
+    """ Transorm a dictionary samples into custom dictionary objects
+    """
+    def __init__(self, dp):
+        self.dp = dp
+    
+    def __iter__(self):
+        for sample in self.dp:
+            if isinstance(sample, dict):
+                yield self.CustomDict(sample)
+            else:
+                yield sample
+    
+    class CustomDict(dict):
+        """ Subclass of dict that implements dummy comparison operators
+            This avoids a bug in the MaxTokenBucketizer bucketizer.
+        """
+        def __lt__(self, _):
+            return False
+        
+        def __gt__(self, _):
+            return True
 
 
 class CustomBatcher(IterDataPipe):
@@ -91,10 +115,9 @@ class CustomBatcher(IterDataPipe):
         The unique logic is there to prevent a bug (?) in MaxTokenBucketizer
     """
     def __init__(self, dp, max_tokens, max_len, shuffle=True):
-        self.unique_table = torch.arange(0, 1 - 6e-8, 6e-8).tolist()  # problem
-        self.unique_cursor = 0
         dp = Trimer(dp, max_len)
         if shuffle: dp = Shuffler(dp)
+        dp = DictCustomizer(dp)  # useful to fix a bug in MaxTokenBucketizer
         dp = MaxTokenBucketizer(datapipe=dp,
                                 max_token_count=max_tokens,
                                 len_fn=self.len_fn,
@@ -113,12 +136,9 @@ class CustomBatcher(IterDataPipe):
             Note that the length is made unique to avoid an issue in torchdata
         """
         if isinstance(sample, dict):
-            length = sum([self.compute_len(sample[k]) for k in sample.keys()])
+            return sum([self.compute_len(sample[k]) for k in sample.keys()])
         else:
-            length = self.compute_len(sample)
-        length += self.unique_table[self.unique_cursor]
-        self.unique_cursor = (self.unique_cursor + 1) % len(self.unique_table)
-        return length
+            return self.compute_len(sample)
     
     @staticmethod
     def compute_len(sample):
