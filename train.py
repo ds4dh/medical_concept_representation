@@ -99,7 +99,7 @@ class PytorchLightningWrapper(pl.LightningModule):
 
     def test_epoch_end(self, output):
         figure_absolute_path  = evaluation.concept_visualization.evaluate(tokenizer, model, categorization_strategy = 'prefix_codes')
-        self.logger.experiment.add_image()
+        self.logger.experiment.add_image(figures_absolute_path)
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
 
