@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
+import evaluation 
 warnings.filterwarnings('ignore', category=PossibleUserWarning)
 
 
@@ -97,7 +98,8 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        pass
+        figure_absolute_path  = evaluation.concept_visualization.evaluate(tokenizer, model, categorization_strategy = 'prefix_codes')
+        self.logger.experiment.add_image()
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
 
