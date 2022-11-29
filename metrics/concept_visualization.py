@@ -32,7 +32,7 @@ def compute_reduced_representation(embeddings, algorithm='pca', n_dims=2):
         raise ValueError('Invalid algorithm name (pca, tsne).')
 
 
-def visualize(reduced, labels):
+def visualize(reduced, dfc, labels_list, cat):
     for i in labels_list:
         to_vis= reduced[:,dfc['label'] == i]
         plt.scatter(*to_vis, s=4)
@@ -40,8 +40,8 @@ def visualize(reduced, labels):
     # plt legend right out of the box 
     plt.legend(labels_list, bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
     # plt disable ticks 
-    # plt.xticks([])
-    # plt.yticks([])
+    plt.xticks([])
+    plt.yticks([])
     plt.xlabel(cat)
     os.makedirs(os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}'), exist_ok=True)
     FIGURE_PATH = os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}', f'{cat}_{ALGORITHM}.png')
@@ -104,11 +104,12 @@ def evaluate(tokenizer, model, categorization_strategy = 'prefix_codes', dimensi
             else 'OTHER'
         )
         labels_list = labels_list + ['OTHER']
+        # import pdb; pdb.set_trace()
         tokens = words.apply(lambda x: pipeline.tokenizer.encode(x))
         embeddings = model.get_token_embeddings(tokens)
         # reduce  dimensionality
         reduced = compute_reduced_representation(embeddings, algorithm=dimensionality_reduction_algorithm, n_dims=2).reshape(2,-1)
-        visualize(reduced, dfc['label'])
+        visualize(reduced, dfc, labels_list, cat)
 
 
 if __name__ == '__main__':

@@ -60,4 +60,4 @@ def get_token_info(model, tokenizer, cat):
     initials = np.array([token.split('_')[-1][pos] for token in tokens])
     return {'tokens': tokens, 'embedded': embeddings, 'initials': initials}
 
-clustering_task_ehr(model, tokenizer)
+# clustering_task_ehr(model, tokenizer) commented to not run automatically

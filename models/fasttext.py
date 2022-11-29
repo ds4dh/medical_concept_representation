@@ -43,7 +43,7 @@ class FastText(nn.Module):
     def get_token_embeddings(self, token_indices):
         """ Compute static embeddings each token in a list
         """
-        all_embeddings = self.u_embeddings.weight
+        all_embeddings = self.center_embeddings.weight
         token_embeddings = []
         for token_index in token_indices:
             embedded = all_embeddings[token_index]
