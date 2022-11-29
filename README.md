@@ -25,3 +25,22 @@ Build a genetic algorithm that sends a boolean vector request to the dataset pip
 
 #### (3) Test metric (Alban)
 For each model, code a test metric function that extracts embeddings from the test set (using input without diagnoses) and performs diagnose prediction using the minimal cosine distance.
+
+
+
+
+
+
+## Analysis 
+
+For all the tasks the following structure is assumed in under `data/`:
+
+`automated_phenotyping/data/datasets/autophe/time_categorized/sentences_time_train_categorized.json`
+
+### Concept analysis 
+
+This plot visualizes the embeddings of the most populous tokens in the dataset.
+Calling directly the script will provide a demo plot for the FastText model.
+`python -m  metrics.concept_visualization`
+
+The plot is planned to be used in train.py 

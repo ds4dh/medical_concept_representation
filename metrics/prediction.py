@@ -2,7 +2,7 @@ import os
 import json
 import numpy as np
 import matplotlib
-matplotlib.use('tkagg')
+# matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 from sklearn.metrics.pairwise import cosine_similarity as cossim
 
