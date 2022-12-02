@@ -1,10 +1,19 @@
 import warnings
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
+from gradient_descent_the_ultimate_optimizer import gdtuo
 
 
-def select_optimizer(model_weights, train_params):
-    optim_params = {'params': model_weights,
+def select_optimizer(model, train_params):
+    # Hyper-optimization
+    if train_params['optimizer'] == 'gdtuo':
+        optim = gdtuo.Adam(optimizer=gdtuo.Adam(alpha=train_params['lr']))
+        mw = gdtuo.ModuleWrapper(model, optimizer=optim)
+        mw.initialize()
+        return mw
+
+    # Classic optimization
+    optim_params = {'params': model.params(),
                     'lr': train_params['lr'],
                     'betas': train_params['betas'],
                     'weight_decay': train_params['weight_decay']}
@@ -50,8 +59,7 @@ class NoamSchedulerWithWarmup(_LRScheduler):
     def get_lr(self):
         if not self._get_lr_called_within_step:
             warnings.warn('To get the last learning rate computed by the \
-                          scheduler, please use get_last_lr().',
-                          UserWarning)
+                          scheduler, please use get_last_lr().', UserWarning)
         return self._get_lr_fn(self.init_lrs)
 
     def _get_closed_form_lr(self):

@@ -104,7 +104,7 @@ class DataPipeline():
         
         # Train the tokenizer with the training data (validation if debug mode)
         tokenizer_training_batches = []
-        for sample in tqdm(dp, desc=' - Building data to train the tokenizer'):
+        for sample in tqdm(dp, desc=' - Building tokenizer data'):
             if isinstance(sample, dict):  # avoid taking label indices as tokens
                 sample = {k: v for k, v in sample.items() if 'label' not in k}
                 sample = list(chain(*list(sample.values())))

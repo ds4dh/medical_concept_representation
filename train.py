@@ -10,6 +10,7 @@ from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
 import evaluation 
 warnings.filterwarnings('ignore', category=PossibleUserWarning)
+warnings.filterwarnings('ignore', category=UserWarning)
 
 
 parser = argparse.ArgumentParser(description='Train and test model.')
@@ -36,22 +37,21 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.model = model(**model_params)
         
         # Some useful parameters for the run
+        self.automatic_optimization = False  # manually for hyper-optimization
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
-        
-        # # THIS IS JUST TO TEST MY METRICS WITHOUT TRAINING A MODEL, WILL REMOVE
-        # import os
-        # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
-        # metrics.prediction_task_ehr(self.model,
-        #                             os.path.join(data_params['data_dir'],
-        #                                          data_params['data_subdir']),
-        #                             self.pipeline.tokenizer)
-        # exit()
         
     def step(self, batch, batch_idx, mode):
         """ Proceed forward pass of the mode ('train' or 'val'), compute loss
             Note: the loss function used to compute the loss is model-specific       
         """
+        # Initialize hyper-optimization if needed
+        if mode == 'train':
+            if train_params['optimizer'] == 'gdtuo':
+                self.mv.begin()
+            else:
+                optim = self.optimizers()
+
         # Retrieve inputs and labels and run the model
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
@@ -60,14 +60,18 @@ class PytorchLightningWrapper(pl.LightningModule):
         # Compute loss and other metrics that may be defined in the model
         loss = self.model.loss_fn(outputs, **labels)
         returned = {'loss': loss}
-        if hasattr(self.model, '%s_metric' % mode):  # should remove this
-            metric_fn = getattr(self.model, '%s_metric' % mode)
-            returned.update(metric_fn(logger=self.logger.experiment,
-                                      batch_idx=batch_idx,
-                                      step=self.global_step,
-                                      outputs=outputs,
-                                      **labels))
-
+        
+        # Perform optimization (or hyper-optimization if needed)
+        if mode == 'train':
+            if train_params['optimizer'] == 'gdtuo':
+                self.mv.zero_grad()
+                self.manual_backward(loss, create_graph=True)
+                self.mv.step()
+            else:
+                optim.zero_grad()
+                self.manual_backward(loss)
+                optim.step()
+            
         # Log loss and other metrics, and return them to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
         for k, v in returned.items():
@@ -80,9 +84,6 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, batch_idx, 'train')
             
     def validation_step(self, batch, batch_idx):
-        # USEFULENESS OF VALIDATION SET? GOOD TO AVOID FITTING HYPERPARAMETERS ON THE TEST SET
-        # BUT APART FROM THAT, ONCE WE HAVE VALIDATED THE HYPERPARAMETERS, WE CAN USE VALIDATION + TRAINING AS TRAINING
-        # OR AT LEAST WE NEED TO EMBED ALL THE CONCEPTS (SO NOT LOOSING SOME OF THEM JUST BECAUSE WE WANT VALIDATION)
         """ Perform validation step and return loss (see step)
         """
         return self.step(batch, batch_idx, 'val')
@@ -98,8 +99,9 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        figure_absolute_path  = evaluation.concept_visualization.evaluate(tokenizer, model, categorization_strategy = 'prefix_codes')
-        self.logger.experiment.add_image(figures_absolute_path)
+        pass
+        # figure_absolute_path  = evaluation.concept_visualization.evaluate(tokenizer, model, categorization_strategy = 'prefix_codes')
+        # self.logger.experiment.add_image(figures_absolute_path)
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
 
@@ -130,7 +132,10 @@ class PytorchLightningWrapper(pl.LightningModule):
     def configure_optimizers(self):
         """ Return the optimizer and the scheduler
         """
-        optim = train_utils.select_optimizer(self.parameters(), train_params)
+        optim = train_utils.select_optimizer(self.model, train_params)
+        if train_params['optimizer'] == 'gdtuo':
+            self.mv = optim
+            return None  # will not use pytorch-lightning logic in this case
         sched = train_utils.select_scheduler(optim, train_params)
         sched_dict = {'scheduler': sched, 'interval': 'step', 'frequency': 1}
         return [optim], [sched_dict]
@@ -186,7 +191,7 @@ def main():
     
     # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    # trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
+    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
 
 
 if __name__ == '__main__':
@@ -201,7 +206,4 @@ if __name__ == '__main__':
         # stats.dump_stats(filename='profiling.prof')    
         stats.print_stats()
     else:
-        import time
-        t0 = time.time()
         main()
-        print(time.time() - t0)
