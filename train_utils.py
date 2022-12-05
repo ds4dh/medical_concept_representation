@@ -13,7 +13,7 @@ def select_optimizer(model, train_params):
         return mw
 
     # Classic optimization
-    optim_params = {'params': model.params(),
+    optim_params = {'params': model.parameters(),
                     'lr': train_params['lr'],
                     'betas': train_params['betas'],
                     'weight_decay': train_params['weight_decay']}

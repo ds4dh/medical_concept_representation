@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
-import evaluation 
 warnings.filterwarnings('ignore', category=PossibleUserWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
@@ -37,7 +36,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.model = model(**model_params)
         
         # Some useful parameters for the run
-        self.automatic_optimization = False  # manually for hyper-optimization
+        self.automatic_optimization = (train_params['optimizer'] != 'gdtuo')
         self.input_keys = set(model_params['input_keys'])
         self.label_keys = set(model_params['label_keys'])
         
@@ -46,12 +45,9 @@ class PytorchLightningWrapper(pl.LightningModule):
             Note: the loss function used to compute the loss is model-specific       
         """
         # Initialize hyper-optimization if needed
-        if mode == 'train':
-            if train_params['optimizer'] == 'gdtuo':
-                self.mv.begin()
-            else:
-                optim = self.optimizers()
-
+        if mode == 'train' and train_params['optimizer'] == 'gdtuo':
+            self.mv.begin()
+            
         # Retrieve inputs and labels and run the model
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
@@ -62,15 +58,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         returned = {'loss': loss}
         
         # Perform optimization (or hyper-optimization if needed)
-        if mode == 'train':
-            if train_params['optimizer'] == 'gdtuo':
-                self.mv.zero_grad()
-                self.manual_backward(loss, create_graph=True)
-                self.mv.step()
-            else:
-                optim.zero_grad()
-                self.manual_backward(loss)
-                optim.step()
+        if mode == 'train' and train_params['optimizer'] == 'gdtuo':
+            self.mv.zero_grad()
+            self.manual_backward(loss, create_graph=True)
+            self.mv.step()
             
         # Log loss and other metrics, and return them to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
@@ -99,9 +90,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        pass
-        # figure_absolute_path  = evaluation.concept_visualization.evaluate(tokenizer, model, categorization_strategy = 'prefix_codes')
-        # self.logger.experiment.add_image(figures_absolute_path)
+        metrics.evaluate(self.pipeline.tokenizer,
+                         self.model,
+                         self.logger,
+                         categorization_strategy='prefix_codes')
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
 
@@ -202,8 +194,7 @@ if __name__ == '__main__':
         with cProfile.Profile() as pr:
             main()
         stats = pstats.Stats(pr)
-        stats.sort_stats(pstats.SortKey.TIME)
-        # stats.dump_stats(filename='profiling.prof')    
-        stats.print_stats()
+        stats.sort_stats(pstats.SortKey.TIME) 
+        stats.print_stats()  # stats.dump_stats(filename='profiling.prof')
     else:
         main()
