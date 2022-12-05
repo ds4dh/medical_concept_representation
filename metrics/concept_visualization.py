@@ -6,7 +6,6 @@ import torch
 import matplotlib.pyplot as plt
 import matplotlib
 # matplotlib.use('tkagg')
-import pandas as pd 
 import numpy as np
 import os 
 import pickle 
@@ -16,9 +15,9 @@ import data
 
 
 EXPERIMENT_NAME = 'analysis_1__Concept_Visualization'
-PATH = '/home/dproios/work/AIME_DS4DH/data'
+# PATH = '/home/dproios/work/AIME_DS4DH/data'
 ALGORITHM = 'pca' # 'tsne'
-FPATH = os.path.join('/home/dproios/work/automated_phenotyping/data/datasets/autophe/time_categorized')
+# FPATH = os.path.join('/home/dproios/work/automated_phenotyping/data/datasets/autophe/time_categorized')
 
 
 
@@ -32,7 +31,8 @@ def compute_reduced_representation(embeddings, algorithm='pca', n_dims=2):
         raise ValueError('Invalid algorithm name (pca, tsne).')
 
 
-def visualize(reduced, dfc, labels_list, cat):
+def visualize(reduced, dfc, labels_list, cat, logger):
+    fig = plt.figure()  # add height / width values
     for i in labels_list:
         to_vis= reduced[:,dfc['label'] == i]
         plt.scatter(*to_vis, s=4)
@@ -43,12 +43,16 @@ def visualize(reduced, dfc, labels_list, cat):
     plt.xticks([])
     plt.yticks([])
     plt.xlabel(cat)
-    os.makedirs(os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}'), exist_ok=True)
-    FIGURE_PATH = os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}', f'{cat}_{ALGORITHM}.png')
-    plt.savefig(FIGURE_PATH)
-    print(f'Figure saved at {FIGURE_PATH}')
-    return FIGURE_PATH
-
+    # os.makedirs(os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}'), exist_ok=True)
+    # FIGURE_PATH = os.path.join(os.path.dirname(__file__), f'figures_{EXPERIMENT_NAME}', f'{cat}_{ALGORITHM}.png')
+    # plt.savefig(FIGURE_PATH)
+    # print(f'Figure saved at {FIGURE_PATH}')
+    # return FIGURE_PATH
+    fig.canvas.draw()  # I added this to avoid the savefig call
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    data = torch.from_numpy(data).permute(2, 0, 1)
+    logger.experiment.add_image('test', data)
 
 def get_most_populous_labels(words: list, number_of_chars): 
     word_list = [w.split('_')[1] for w in words]
@@ -57,14 +61,14 @@ def get_most_populous_labels(words: list, number_of_chars):
     return arr[:10]
 
 
-def get_categories_per_token(vocabulary, categorization_strategy = 'prefix_codes'):
+def get_categories_per_token(vocabulary, categorization_strategy):
     '''
     unfortunately it's hard to be agnostic to tokens so these rules are based on.
     For different ones you need to define the strategy accordingly
     ('MED' | 'DIA' |  'LAB' |  'LOC' |  'DEM'  |  'PRO')_<NOT_RELEVANT_PART_OF_CODE>
     '''
     all_rows =[] 
-    for w in pipeline.tokenizer.get_vocab():
+    for w in vocabulary:
         for cat in ['MED','DIA', 'LAB', 'LOC', 'DEM' , 'PRO']:
             if ( 
                     w!=(cat+'_')  # filter out category tokens 'MED_' 'DIA_' etc
@@ -76,7 +80,7 @@ def get_categories_per_token(vocabulary, categorization_strategy = 'prefix_codes
     return pd.DataFrame.from_records(all_rows).reset_index(drop=True)
 
 
-def evaluate(tokenizer, model, categorization_strategy = 'prefix_codes', dimensionality_reduction_algorithm = 'pca'):
+def evaluate(tokenizer, model, logger, categorization_strategy='prefix_codes', dimensionality_reduction_algorithm = 'pca'):
     '''
     @param tokenizer: tokenizer used to assign numerical IDs to words 
     @param model: model to evaluate
@@ -86,8 +90,7 @@ def evaluate(tokenizer, model, categorization_strategy = 'prefix_codes', dimensi
     assert len([ w  for w in tokenizer.get_vocab()]) > 0, 'Vocabulary is empty'
     
     # get category per token
-    
-    df = get_categories_per_token(vocabulary, categorization_strategy = 'prefix_codes')
+    df = get_categories_per_token(vocabulary, categorization_strategy)
     
     number_of_chars = 2 
     for cat in ['MED','DIA', 'LAB', 
@@ -104,12 +107,11 @@ def evaluate(tokenizer, model, categorization_strategy = 'prefix_codes', dimensi
             else 'OTHER'
         )
         labels_list = labels_list + ['OTHER']
-        # import pdb; pdb.set_trace()
-        tokens = words.apply(lambda x: pipeline.tokenizer.encode(x))
+        tokens = words.apply(lambda x: tokenizer.encode(x))
         embeddings = model.get_token_embeddings(tokens)
-        # reduce  dimensionality
+        # reduce dimensionality
         reduced = compute_reduced_representation(embeddings, algorithm=dimensionality_reduction_algorithm, n_dims=2).reshape(2,-1)
-        visualize(reduced, dfc, labels_list, cat)
+        visualize(reduced, dfc, labels_list, cat, logger)
 
 
 if __name__ == '__main__':

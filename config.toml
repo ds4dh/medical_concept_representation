@@ -1,5 +1,5 @@
 [run]
-  # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'bert_classifier', 'transformer'
+  # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
   model_used = 'bert'
   model_version = 0
   exp_id = 'test'
@@ -23,14 +23,14 @@
   max_seq_len = 512
 
 [train]
-  optimizer = 'gdtuo'  # adam, radam, adamw, gdtuo (hyper-optimizated adam)
-  scheduler = 'noam'  # 'noam', 'linear'
+  optimizer = 'adam'  # adam, radam, adamw, NOT USE gdtuo FOR NOW
+  scheduler = 'noam'  # 'noam', 'linear' (not used if optimizer = gdtuo)
   lr = 0.001  # initial learning rate (after warmup)
-  betas = [0.9, 0.998]  # momentum
-  weight_decay = 0.01  # weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
+  betas = [0.9, 0.998]  # initial momentum
+  weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 4096
-  n_epochs = 10  # if n_epochs set to 0, n_steps will be used
+  n_epochs = 1  # if n_epochs set to 0, n_steps will be used
   n_steps = 500000
   n_warmup_steps = 10000
 
@@ -92,7 +92,6 @@
 
   [models.bert]
     task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
-    attn_type = 'attention'  # 'fourier', 'attention' -> TODO: change to several models
     input_keys = ['masked']
     label_keys = ['masked_label', 'masked_label_ids']
     n_layers = 2  # 4
@@ -121,3 +120,20 @@
     load_pretrained_bert = true
     bert_path = './logs/reagent_pred/bert_ngram-word/version_0/'
     bert_grad_type = 'all'  # 'last', 'none', 'norm', 'all' (weights tuned in bert)
+
+  [models.fnet]
+    task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
+    input_keys = ['masked']
+    label_keys = ['masked_label', 'masked_label_ids']
+    n_layers = 2  # 4
+    d_embed = 128  # 256
+    d_ff = 1024  # 2048
+    n_heads = 4  # 8
+    dropout = 0.1
+    [models.fnet.special_tokens]
+      '[PAD]' = 0
+      '[UNK]' = 1
+      '[CLS]' = 2
+      '[SEP]' = 3
+      '[END]' = 4
+      '[MASK]' = 5
