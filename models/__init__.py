@@ -3,6 +3,7 @@ from .glove import Glove
 from .elmo import ELMO
 from .transformer import Transformer
 from .bert import BERT
+from .fnet import FNet
 from .bert_classifier import BERTClassifier
 from .model_utils import (
     load_model_and_params_from_config,
@@ -16,4 +17,5 @@ AVAILABLE_MODELS = {'fasttext': FastText,
                     'elmo': ELMO,
                     'transformer': Transformer,
                     'bert': BERT,
+                    'fnet': FNet,
                     'bert_classifier': BERTClassifier}

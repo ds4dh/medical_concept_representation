@@ -6,7 +6,7 @@ import math
 from itertools import zip_longest
 
 
-class BERT(nn.Module):
+class FNet(nn.Module):
     def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
                  d_ff, n_layers, dropout=0.1, n_heads=None, *args, **kwargs):
         super().__init__()
@@ -26,7 +26,10 @@ class BERT(nn.Module):
         # BERT layers
         self.layers = nn.ModuleList([])
         for l in range(n_layers):
-            attn_module = MultiHeadedAttention(n_heads, d_embed, dropout)
+            if l < n_layers - 2:
+                attn_module = FourierLayer()
+            else:
+                attn_module = MultiHeadedAttention(n_heads, d_embed, dropout)
             self.layers.append(nn.ModuleList([
                 Norm(d_embed, attn_module),
                 Norm(d_embed, FeedForward(d_embed, d_ff, dropout))]))
@@ -168,6 +171,14 @@ class Norm(nn.Module):
             return self.norm(self.fn(x, **kwargs))  # not tested yet
         else:
             raise ValueError('Invalid mode for normalization (pre, post)')
+
+
+class FourierLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x, *args, **kwargs):
+        return torch.fft.fft(torch.fft.fft(x, dim=-1), dim=-2).real
 
 
 class MultiHeadedAttention(nn.Module):
