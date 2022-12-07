@@ -43,36 +43,46 @@ class PytorchLightningWrapper(pl.LightningModule):
     def step(self, batch, batch_idx, mode):
         """ Proceed forward pass of the mode ('train' or 'val'), compute loss
             Note: the loss function used to compute the loss is model-specific       
-        """
-        # Initialize hyper-optimization if needed
-        if mode == 'train' and train_params['optimizer'] == 'gdtuo':
-            self.mv.begin()
-            
-        # Retrieve inputs and labels and run the model
+        """            
+        # Retrieve inputs and labels and compute model loss
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         outputs = self.model(**inputs)
-        
-        # Compute loss and other metrics that may be defined in the model
         loss = self.model.loss_fn(outputs, **labels)
-        returned = {'loss': loss}
-        
-        # Perform optimization (or hyper-optimization if needed)
-        if mode == 'train' and train_params['optimizer'] == 'gdtuo':
-            self.mv.zero_grad()
-            self.manual_backward(loss, create_graph=True)
-            self.mv.step()
             
-        # Log loss and other metrics, and return them to the pl-module
+        # Log loss and return it to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
-        for k, v in returned.items():
-            self.log('%s_%s' % (mode, k), v.cpu().detach(), batch_size=btch_sz)
-        return returned
+        self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=btch_sz)
+        return {'loss': loss}
     
+    def gdtuo_train_step(self, batch):
+        """ Proceed hyper-optimization training step with gdtu-optimizer
+            !!!Note: not working properly for now!!!
+        """
+        # Retrieve inputs and labels, initivalize mv and compute model loss
+        inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
+        labels = {k: batch[k] for k in batch.keys() & self.label_keys}
+        self.mv.begin()
+        outputs = self.mv.forward(**inputs)
+        loss = self.model.loss_fn(outputs, **labels)
+        
+        # Perform hyper-optimization with gdtuo
+        self.mv.zero_grad()
+        self.manual_backward(loss, create_graph=True)  # loss.backward(create_graph=True)
+        self.mv.step()
+
+        # Log loss and return it to the pl-module
+        btch_sz = inputs[list(inputs.keys())[0]].size(0)
+        self.log('train_loss', loss.cpu().detach(), batch_size=btch_sz)
+        return {'loss': loss}
+
     def training_step(self, batch, batch_idx):
         """ Perform training step and return loss (see step)
         """
-        return self.step(batch, batch_idx, 'train')
+        if train_params['optimizer'] == 'gdtuo':
+            return self.gdtuo_train_step(batch)
+        else:
+            return self.step(batch, batch_idx, 'train')
             
     def validation_step(self, batch, batch_idx):
         """ Perform validation step and return loss (see step)
@@ -154,13 +164,7 @@ def main():
     accelerator, devices = models.set_environment(run_params['num_workers'])
     
     # Callbacks for logging and checkpointing
-    callbacks = [LearningRateMonitor(logging_interval='step'),
-                 ModelCheckpoint(monitor=None,
-                                 mode='min',
-                                 every_n_train_steps=0,
-                                 every_n_epochs=1,
-                                 train_time_interval=None,
-                                 save_on_train_epoch_end=None)]
+    callbacks = [LearningRateMonitor(logging_interval='step'),]
     
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir=log_dir,
@@ -172,7 +176,7 @@ def main():
                          accelerator=accelerator,
                          devices=devices,
                          num_sanity_val_steps=0,
-                         accumulate_grad_batches= \
+                         accumulate_grad_batches=
                             train_params['accumulate_grad_batches'],
                          gradient_clip_val=0.0,
                          max_epochs=train_params['n_epochs'],

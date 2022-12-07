@@ -1,17 +1,12 @@
 
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-import pandas as pd 
+import pandas as pd
 import torch 
 import matplotlib.pyplot as plt
-import matplotlib
-# matplotlib.use('tkagg')
 import numpy as np
-import os 
-import pickle 
-import json 
+import data
 import models 
-import data 
 
 
 EXPERIMENT_NAME = 'analysis_1__Concept_Visualization'

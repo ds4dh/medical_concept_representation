@@ -1,38 +1,38 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'bert'
+  model_used = 'fasttext'
   model_version = 0
   exp_id = 'test'
-  ngram_mode = 'word'  # 'word', 'subword', 'icd'
-  ngram_min_len = 1  # only used for ngram_mode == 'subword'; must be > 0
-  ngram_max_len = 1  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
+  ngram_mode = 'icd'  # 'word', 'subword', 'icd'
+  ngram_min_len = 2  # only used for ngram_mode == 'subword'; must be > 0
+  ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
   ngram_base_suffixes = [':OK', ':AB']  # only used for ngram_mode != 'word'
-  debug = true
+  debug = false
   load_model = false  # note: changing ngram_len will change embedding layer
-  load_tokenizer = true  # TODO: implement this
+  load_tokenizer = false  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
   data_dir = './data/datasets/autophe'
-  data_subdir = 'time_categorized'  # time_categorized, time_not_categorized
+  data_subdir = 'time_categorized_atc'  # time_categorized, time_not_categorized
   # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
   # data_subdir = 'smiles'
   log_dir = './logs'
   max_seq_len = 512
 
 [train]
-  optimizer = 'adam'  # adam, radam, adamw, NOT USE gdtuo FOR NOW
-  scheduler = 'noam'  # 'noam', 'linear' (not used if optimizer = gdtuo)
+  optimizer = 'adamw'  # adam, radam, adamw, NOT USE gdtuo FOR NOW (buggy)
+  scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer = gdtuo)
   lr = 0.001  # initial learning rate (after warmup)
   betas = [0.9, 0.998]  # initial momentum
   weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 4096
-  n_epochs = 1  # if n_epochs set to 0, n_steps will be used
-  n_steps = 500000
-  n_warmup_steps = 10000
+  n_epochs = 0  # if n_epochs set to 0, n_steps will be used
+  n_steps = 5000000  # only used if n_epochs is set to 0
+  n_warmup_steps = 100000
 
 [models]
   [models.fasttext]
@@ -94,10 +94,10 @@
     task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
     label_keys = ['masked_label', 'masked_label_ids']
-    n_layers = 2  # 4
-    d_embed = 128  # 256
-    d_ff = 1024  # 2048
-    n_heads = 4  # 8
+    n_layers = 4
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
     dropout = 0.1
     [models.bert.special_tokens]
       '[PAD]' = 0
@@ -125,10 +125,10 @@
     task = 'mlm'  # 'mlm', 'reagent_pred_mlm'
     input_keys = ['masked']
     label_keys = ['masked_label', 'masked_label_ids']
-    n_layers = 2  # 4
-    d_embed = 128  # 256
-    d_ff = 1024  # 2048
-    n_heads = 4  # 8
+    n_layers = 4
+    d_embed = 256
+    d_ff = 2048
+    n_heads = 8
     dropout = 0.1
     [models.fnet.special_tokens]
       '[PAD]' = 0
