@@ -1,8 +1,8 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'fasttext'
+  model_used = 'fnet'
   model_version = 0
-  exp_id = 'test'
+  exp_id = 'icd-tokenization'
   ngram_mode = 'icd'  # 'word', 'subword', 'icd'
   ngram_min_len = 2  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
@@ -16,7 +16,7 @@
 
 [data]
   data_dir = './data/datasets/autophe'
-  data_subdir = 'time_categorized_atc'  # time_categorized, time_not_categorized
+  data_subdir = 'time_categorized_atc'  # time_categorized, time_categorized_atc, time_not_categorized
   # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
   # data_subdir = 'smiles'
   log_dir = './logs'
@@ -31,8 +31,8 @@
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 65536  # 4096
   n_epochs = 0  # if n_epochs set to 0, n_steps will be used
-  n_steps = 5000000  # only used if n_epochs is set to 0
-  n_warmup_steps = 100000
+  n_steps = 500000  # only used if n_epochs is set to 0
+  n_warmup_steps = 10000
 
 [models]
   [models.fasttext]

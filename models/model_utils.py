@@ -208,6 +208,10 @@ def set_environment(num_workers):
     """
     if num_workers > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
-    accelerator = 'gpu' if torch.cuda.is_available() else 'cpu'
-    devices = 1 if accelerator == 'gpu' else 'auto'
+    if torch.cuda.is_available():
+        accelerator = 'gpu'
+        devices = [torch.cuda.device_count() - 1]  # last gpu index
+    else:
+        accelerator = 'cpu'
+        devices = 'auto'
     return accelerator, devices

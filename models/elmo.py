@@ -99,9 +99,11 @@ class ELMO(nn.Module):
     def get_token_embeddings(self, token_indices):
         """ Compute static embeddings for a token list
         """
+        device = self.get_device()
         embeddings = []
         for token_index in token_indices:
-            token_index = torch.tensor(token_index)[None, None, ...]
+            token_index = torch.tensor(token_index,
+                                       device=device)[None, None, ...]
             embedded = self.compute_static_embeddings(token_index)
             embeddings.append(embedded.squeeze())
         return torch.stack(embeddings, dim=0).detach().cpu()
@@ -142,6 +144,14 @@ class ELMO(nn.Module):
         else:  # weighted average
             weights = torch.tensor(weights, dtype=embeddings.dtype)
             return embeddings.T @ weights / weights.sum()
+    
+    def get_device(self):
+        """ Retrieve the device on which elmo weights are
+        """
+        if self.token_type == 'word':
+            return self.word_embedding.weight.device
+        else:
+            return self.char_embedding.weight.device
 
 
 class ELMOLoss(nn.Module):
