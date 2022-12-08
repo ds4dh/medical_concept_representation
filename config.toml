@@ -29,7 +29,7 @@
   betas = [0.9, 0.998]  # initial momentum
   weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
-  max_tokens_per_batch = 4096
+  max_tokens_per_batch = 65536  # 4096
   n_epochs = 0  # if n_epochs set to 0, n_steps will be used
   n_steps = 5000000  # only used if n_epochs is set to 0
   n_warmup_steps = 100000
