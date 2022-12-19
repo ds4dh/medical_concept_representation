@@ -1,6 +1,6 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'fasttext'
+  model_used = 'glove'
   model_version = 0
   exp_id = 'test'  # 'icd-tokenization'
   ngram_mode = 'icd'  # 'word', 'subword', 'icd'
@@ -8,7 +8,7 @@
   ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
   ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
   ngram_base_suffixes = [':OK', ':AB']  # only used for ngram_mode != 'word'
-  debug = false
+  debug = true
   load_model = false  # note: changing ngram_len will change embedding layer
   load_tokenizer = false  # TODO: implement this
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
@@ -25,11 +25,11 @@
 [train]
   optimizer = 'adamw'  # adam, radam, adamw, NOT USE gdtuo FOR NOW (buggy)
   scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer = gdtuo)
-  lr = 0.01  # initial learning rate (after warmup)
+  lr = 0.0001  # initial learning rate (after warmup)
   betas = [0.9, 0.998]  # initial momentum
   weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
-  max_tokens_per_batch = 65536  # 4096
+  max_tokens_per_batch = 4096  # 65536
   n_epochs = 0  # if n_epochs set to 0, n_steps will be used  # TODO: CHECK CLASH WITH SCHEDULER!
   n_steps = 100000  # only used if n_epochs is set to 0
   n_warmup_steps = 10000
@@ -39,8 +39,8 @@
     task = 'skipgram'
     input_keys = ['pos_center', 'pos_context', 'neg_context']
     label_keys = []
-    d_embed = 256
     n_neg_samples = 20  # 0 for using softmax over all vocab tokens
+    d_embed = 256
     [models.fasttext.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -49,6 +49,7 @@
     task = 'cooc'
     input_keys = ['left', 'right']
     label_keys = ['cooc']
+    load_cooc_data = true
     d_embed = 256
     [models.glove.special_tokens]
       '[PAD]' = 0

@@ -16,7 +16,7 @@ class Glove(nn.Module):
         self.l_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
         self.r_emb = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
         self.r_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
-        self.loss_fn = GloveLoss(reduce='mean')  # 'sum' for original behaviour
+        self.loss_fn = GloveLoss()
 
     def forward(self, left, right):
         # Compute embeddings
@@ -83,7 +83,9 @@ class GloveLoss(nn.Module):
     def normalize(self, t):
         """ Normalization as in the original article.
         """
-        return torch.where(t < self.m, (t / self.m) ** self.a, torch.ones_like(t))
+        return torch.where(t < self.m,
+                           (t / self.m) ** self.a,
+                           torch.ones_like(t))
     
     def forward(self, model_output, cooc):
         """ Expects flattened model output and target coocurence matrix.
@@ -92,6 +94,7 @@ class GloveLoss(nn.Module):
         l_t = torch.log(cooc)
         if self.reduce == 'mean':
             return torch.mean(n_t * (model_output - l_t) ** 2)
-        else:
+        elif self.reduce == 'sum':
             return torch.sum(n_t * (model_output - l_t) ** 2)
-        
+        else:
+            raise ValueError('Invalid reduce mode')
