@@ -1,4 +1,5 @@
 import numpy as np
+import hashlib
 from nltk.util import ngrams as ngram_base_fn
 
 
@@ -19,6 +20,11 @@ class Tokenizer():
         self.encoder = dict(special_tokens)
         self.special_tokens = dict(special_tokens)
         self.min_freq = min_freq
+        self.unique_id = self.create_unique_id()
+    
+    def create_unique_id(self):
+        unique_str = str(vars(self))
+        return hashlib.sha256(unique_str.encode()).hexdigest()
 
     def fit(self, words):
         print(' - Training tokenizer')
@@ -100,6 +106,11 @@ class SubWordTokenizer():
         self.ngram_base_prefixes = ngram_base_prefixes
         self.ngram_base_suffixes = ngram_base_suffixes
         self.ngram_fn = self._select_ngram_fn(ngram_mode)
+        self.unique_id = self.create_unique_id()
+    
+    def create_unique_id(self):
+        unique_str = str(vars(self))
+        return hashlib.sha256(unique_str.encode()).hexdigest()
         
     def _select_ngram_fn(self, ngram_mode):
         if ngram_mode == 'subword':

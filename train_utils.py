@@ -30,12 +30,12 @@ def select_optimizer(model, train_params):
 
 def select_scheduler(optimizer, train_params):
     sched_params = {'optimizer': optimizer,
-                    'n_warmup_steps': train_params['n_warmup_steps']}
+                    'n_warmup_steps': train_params['n_sched_warmup_steps']}
     if train_params['scheduler'] == 'noam':
         sched_fn = NoamSchedulerWithWarmup
     elif train_params['scheduler'] == 'linear':
         sched_fn = LinearSchedulerWithWarmup
-        sched_params.update({'n_steps': train_params['n_steps']})
+        sched_params.update({'n_steps': train_params['n_sched_steps']})
     else:
         raise ValueError('Invalid scheduler given to the pipeline.')
     return sched_fn(**sched_params)
@@ -51,7 +51,7 @@ class NoamSchedulerWithWarmup(_LRScheduler):
         :param verbose: print logs
 
     '''
-    def __init__(self, optimizer, n_warmup_steps=8000):
+    def __init__(self, optimizer, n_warmup_steps=10000):
         self.n_warmup_steps = n_warmup_steps
         self.init_lrs = [group['lr'] for group in optimizer.param_groups]
         super(NoamSchedulerWithWarmup, self).__init__(optimizer)

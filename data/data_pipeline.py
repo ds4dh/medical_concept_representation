@@ -65,7 +65,9 @@ class DataPipeline():
             n_neg_samples = self.model_params['n_neg_samples']
             return tasks.SkipGramMaker(dp, self.tokenizer, n_neg_samples)
         elif task == 'cooc':
-            return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
+            load_cooc_data = self.model_params['load_cooc_data']
+            return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir,
+                                   split, load_cooc_data)
         elif task in ['lm', 'mt', 'reagent_pred_mt']:
             return tasks.LMSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:

@@ -10,12 +10,12 @@ class CoocMaker(IterDataPipe):
     """ Compute co-occurence matrix from the source pipeline, and load it to
         memory as a flat array, then get ready to yield the computed samples
     """
-    def __init__(self, dp, tokenizer, data_dir, split, load_data=True):
+    def __init__(self, dp, tokenizer, data_dir, split, load_cooc_data):
         super().__init__()
-        cooc_name = '%s_%s' % (split, tokenizer.__class__.__name__.lower())
-        load_path = os.path.join(data_dir, 'cooc_data', cooc_name)
+        unique_cooc_name = '%s_%s' % (split, tokenizer.unique_id)
+        load_path = os.path.join(data_dir, 'cooc_data', unique_cooc_name)
         data_loaded = False
-        if load_data:
+        if load_cooc_data:
             print(' - Loading co-occurence matrix from %s' % load_path)
             try:
                 self.dp = self.load_dp(load_path)

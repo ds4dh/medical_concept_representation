@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 
 
-# IMPORTANT MAKE SURE THAT PADDING TOKENS DO NOT INFLUENCE SUM OVER NGRAMS IN NGRAMS-GLOVE!!!
 class Glove(nn.Module):
     """ Glove model
     """

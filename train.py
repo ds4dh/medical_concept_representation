@@ -178,9 +178,11 @@ def main():
                          num_sanity_val_steps=0,
                          accumulate_grad_batches=
                             train_params['accumulate_grad_batches'],
-                         gradient_clip_val=0.0,
+                         gradient_clip_val=1.0,
                          max_epochs=train_params['n_epochs'],
                          max_steps=train_params['n_steps'],
+                         check_val_every_n_epoch=None,
+                         val_check_interval=train_params['n_steps_check_val'],
                          log_every_n_steps=10,
                          callbacks=callbacks,
                          logger=logger)
