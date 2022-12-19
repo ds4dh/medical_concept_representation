@@ -1,13 +1,13 @@
-import os
+import runpy
 
 
 def main():
     config_file_path = './config.toml'
-    models = ['fasttext', 'glove', 'elmo', 'bert', 'fnet']
+    models = ['fasttext', 'glove', 'bert', 'fnet', 'elmo']
     for model in models:
         update_config_file_with_new_model(config_file_path, model)
-        os.system('python train.py')
-        print('\n' * 2, 'Simulation finished for %s' % model, '\n' * 4)
+        runpy.run_module('train', run_name='__main__')
+        print('Simulation finished for %s' % model, '\n' * 2)
 
 
 def update_config_file_with_new_model(config_file_path, model):

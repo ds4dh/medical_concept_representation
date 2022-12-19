@@ -62,7 +62,8 @@ class DataPipeline():
         """ Set the pipeline specific to the task of the model
         """
         if task == 'skipgram':
-            return tasks.SkipGramMaker(dp, self.tokenizer)
+            n_neg_samples = self.model_params['n_neg_samples']
+            return tasks.SkipGramMaker(dp, self.tokenizer, n_neg_samples)
         elif task == 'cooc':
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir, split)
         elif task in ['lm', 'mt', 'reagent_pred_mt']:

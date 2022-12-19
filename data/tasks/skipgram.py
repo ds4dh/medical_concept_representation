@@ -8,10 +8,12 @@ class SkipGramMaker(IterDataPipe):
     """ Compute all possible skipgram pairs from the source pipeline and load
         them to memory, then get ready to yield the computed sample pairs
     """
-    def __init__(self, dp, tokenizer):
+    def __init__(self, dp, tokenizer, n_neg_samples):
         super().__init__()
         self.subsample_probs = self.compute_subsample_probs(tokenizer)
-        self.init_neg_list(tokenizer)
+        self.n_neg_samples = n_neg_samples
+        if self.n_neg_samples > 0:
+            self.init_neg_list(tokenizer)
         self.dp = dp
             
     def __iter__(self):
@@ -65,18 +67,21 @@ class SkipGramMaker(IterDataPipe):
                 if not 0 < context_pos < len(sentence) or i == 0:
                     continue
 
-                # Retrieve context word id
-                context_token_id = sentence[context_pos]
-                if isinstance(center_token_id, list):  # for ngram encoding
-                    context_token_id = context_token_id[0]
+                # Softmax case
+                if self.n_neg_samples == 0:
+                    context_token_id = sentence[context_pos]
+                    if isinstance(center_token_id, list):  # word index needed
+                        context_token_id = context_token_id[0]
+                    sample_pairs.append({'pos_center': center_token_id,
+                                         'pos_context': context_token_id})
                 
-                # Get negative samples
-                neg_context_token_ids = self.get_neg_samples()  # no ngrams here
-                
-                # Update the sample pair list
-                sample_pairs.append({'pos_center': center_token_id,
-                                     'pos_context': context_token_id,
-                                     'neg_context': neg_context_token_ids})
+                # Negative sampling case
+                else:
+                    context_token_id = sentence[context_pos]
+                    neg_context_ids = self.get_neg_samples()
+                    sample_pairs.append({'pos_center': center_token_id,
+                                         'pos_context': context_token_id,
+                                         'neg_context': neg_context_ids})
 
         return sample_pairs
 
@@ -91,9 +96,11 @@ class SkipGramMaker(IterDataPipe):
         random.shuffle(self.negatives)
         self.neg_cursor = 0
     
-    def get_neg_samples(self, neg_size=20):
-        neg_samples = self.negatives[self.neg_cursor:self.neg_cursor + neg_size]
-        self.neg_cursor = (self.neg_cursor + neg_size) % len(self.negatives)
-        if len(neg_samples) != neg_size:
+    def get_neg_samples(self):
+        neg_samples = self.negatives[
+            self.neg_cursor:self.neg_cursor + self.n_neg_samples]
+        self.neg_cursor = (self.neg_cursor + self.n_neg_samples)
+        self.neg_cursor = self.neg_cursor % len(self.negatives)  # back to start
+        if len(neg_samples) != self.n_neg_samples:
             neg_samples += self.negatives[0:self.neg_cursor]
         return neg_samples

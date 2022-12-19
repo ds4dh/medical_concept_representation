@@ -5,34 +5,49 @@ import torch.nn.functional as F
 
 # Adapted from https://github.com/Andras7/word2vec-pytorch
 class FastText(nn.Module):
-
-    def __init__(self, vocab_sizes, d_embed, special_tokens, *args, **kwargs):
+    def __init__(self, vocab_sizes, d_embed, special_tokens, n_neg_samples,
+                 *args, **kwargs):
         super(FastText, self).__init__()
         vocab_size = vocab_sizes['total']
         pad_id = special_tokens['[PAD]']
-        self.loss_fn = FastTextLoss()
 
         self.center_embeddings = \
             nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
         self.context_embeddings = \
             nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
+        
+        self.n_neg_samples = n_neg_samples
+        if self.n_neg_samples == 0:
+            self.center_fc = nn.Linear(d_embed, vocab_size)
+            self.loss_fn = FastTextSoftMaxLoss()
+        else:
+            self.loss_fn = FastTextNegSamplingLoss()
 
         bounds = 1.0 / d_embed
         nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
         nn.init.constant_(self.context_embeddings.weight.data, 0)
 
-    def forward(self, pos_center, pos_context, neg_context):
-        pos_center = self.center_embeddings(pos_center)
-        pos_context = self.context_embeddings(pos_context)
-        neg_context = self.context_embeddings(neg_context)
-
-        if len(pos_center.shape) > 2:  # ngram case (mean over word+subword dim)
-            pos_center = self.combine_ngram_embeddings(pos_center, dim=-2)
-
-        return {'pos_center': pos_center,
-                'pos_context': pos_context,
-                'neg_context': neg_context}
-
+    def forward(self, pos_center, pos_context, neg_context=None):
+        # Softmax case
+        if self.n_neg_samples == 0:
+            pos_center = self.center_embeddings(pos_center)
+            if len(pos_center.shape) > 2:  # ngram case
+                pos_center = self.combine_ngram_embeddings(pos_center, dim=-2)
+            return {'pos_center': self.center_fc(pos_center),
+                    'pos_context': pos_context}
+        
+        # Negative sampling case
+        else:
+            pos_center = self.center_embeddings(pos_center)
+            pos_context = self.context_embeddings(pos_context)
+            if len(pos_center.shape) > 2:  # ngram case
+                pos_center = self.combine_ngram_embeddings(pos_center, dim=-2)
+                pos_context = self.combine_ngram_embeddings(pos_context, dim=-2)
+            neg_context = self.context_embeddings(neg_context)
+            return {'pos_center': pos_center,
+                    'pos_context': pos_context,
+                    'neg_context': neg_context}
+                    
     def combine_ngram_embeddings(self, x, dim, reduce='mean'):
         if reduce == 'mean':
             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
@@ -69,8 +84,7 @@ class FastText(nn.Module):
             return embeddings.T @ weights / weights.sum()
             
 
-class FastTextLoss(nn.Module):
-
+class FastTextNegSamplingLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -78,13 +92,27 @@ class FastTextLoss(nn.Module):
         pos_center = model_output['pos_center']
         pos_context = model_output['pos_context']
         neg_context = model_output['neg_context']
-        
+
         score = torch.sum(torch.mul(pos_center, pos_context), dim=1)
         score = torch.clamp(score, max=10, min=-10)
         score = -F.logsigmoid(score)
-
-        neg_score = torch.bmm(neg_context, pos_center.unsqueeze(2)).squeeze()
+        
+        neg_score = torch.bmm(neg_context, pos_center.unsqueeze(2)).squeeze(2)
         neg_score = torch.clamp(neg_score, max=10, min=-10)
         neg_score = -torch.sum(F.logsigmoid(-neg_score), dim=1)
 
         return torch.mean(score + neg_score)
+
+
+class FastTextSoftMaxLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.log_softmax = nn.LogSoftmax(dim=-1)
+        self.nlll_loss = nn.NLLLoss()
+
+    def forward(self, model_output):
+        pos_center = model_output['pos_center']
+        pos_context = model_output['pos_context']
+        logits = self.log_softmax(pos_center)
+        return self.nlll_loss(logits, pos_context)
+    

@@ -1,8 +1,8 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'fnet'
+  model_used = 'fasttext'
   model_version = 0
-  exp_id = 'icd-tokenization'
+  exp_id = 'test'  # 'icd-tokenization'
   ngram_mode = 'icd'  # 'word', 'subword', 'icd'
   ngram_min_len = 2  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
@@ -25,13 +25,13 @@
 [train]
   optimizer = 'adamw'  # adam, radam, adamw, NOT USE gdtuo FOR NOW (buggy)
   scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer = gdtuo)
-  lr = 0.001  # initial learning rate (after warmup)
+  lr = 0.01  # initial learning rate (after warmup)
   betas = [0.9, 0.998]  # initial momentum
   weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 65536  # 4096
-  n_epochs = 0  # if n_epochs set to 0, n_steps will be used
-  n_steps = 500000  # only used if n_epochs is set to 0
+  n_epochs = 0  # if n_epochs set to 0, n_steps will be used  # TODO: CHECK CLASH WITH SCHEDULER!
+  n_steps = 100000  # only used if n_epochs is set to 0
   n_warmup_steps = 10000
 
 [models]
@@ -40,6 +40,7 @@
     input_keys = ['pos_center', 'pos_context', 'neg_context']
     label_keys = []
     d_embed = 256
+    n_neg_samples = 20  # 0 for using softmax over all vocab tokens
     [models.fasttext.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
