@@ -5,7 +5,11 @@ import metrics
 import pytorch_lightning as pl
 import train_utils
 from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.callbacks import (
+    LearningRateMonitor,
+    ModelCheckpoint,
+    EarlyStopping
+)
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
 warnings.filterwarnings('ignore', category=PossibleUserWarning)
@@ -51,43 +55,47 @@ class PytorchLightningWrapper(pl.LightningModule):
         loss = self.model.loss_fn(outputs, **labels)
             
         # Log loss and return it to the pl-module
-        btch_sz = inputs[list(inputs.keys())[0]].size(0)  # outputs.size(0)
+        btch_sz = inputs[list(inputs.keys())[0]].size(0)
         self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=btch_sz)
         return {'loss': loss}
     
-    def gdtuo_train_step(self, batch):
+    def gdtuo_step(self, batch, batch_idx, mode):
         """ Proceed hyper-optimization training step with gdtu-optimizer
             !!!Note: not working properly for now!!!
         """
         # Retrieve inputs and labels, initivalize mv and compute model loss
         inputs = {k: batch[k] for k in batch.keys() & self.input_keys}
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
-        self.mv.begin()
-        outputs = self.mv.forward(**inputs)
+        if mode == 'train': self.mv.begin()
+        outputs = self.mv.forward(inputs)  # input_dict
         loss = self.model.loss_fn(outputs, **labels)
         
         # Perform hyper-optimization with gdtuo
-        self.mv.zero_grad()
-        self.manual_backward(loss, create_graph=True)  # loss.backward(create_graph=True)
-        self.mv.step()
+        if mode == 'train':
+            self.mv.zero_grad()
+            self.manual_backward(loss, create_graph=True)
+            self.mv.step()
 
         # Log loss and return it to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)
-        self.log('train_loss', loss.cpu().detach(), batch_size=btch_sz)
+        self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=btch_sz)
         return {'loss': loss}
 
     def training_step(self, batch, batch_idx):
         """ Perform training step and return loss (see step)
         """
         if train_params['optimizer'] == 'gdtuo':
-            return self.gdtuo_train_step(batch)
+            return self.gdtuo_step(batch, batch_idx, 'train')
         else:
             return self.step(batch, batch_idx, 'train')
             
     def validation_step(self, batch, batch_idx):
         """ Perform validation step and return loss (see step)
         """
-        return self.step(batch, batch_idx, 'val')
+        if train_params['optimizer'] == 'gdtuo':
+            return self.gdtuo_step(batch, batch_idx, 'val')
+        else:
+            return self.step(batch, batch_idx, 'val')
         
     def validation_epoch_end(self, outputs):
         """ Log metrics from the output of the last validation step
@@ -164,7 +172,9 @@ def main():
     accelerator, devices = models.set_environment(run_params['num_workers'])
     
     # Callbacks for logging and checkpointing
-    callbacks = [LearningRateMonitor(logging_interval='step'),]
+    callbacks = [LearningRateMonitor(logging_interval='step'),
+                 # ModelCheckpoint(),  # already there (if with default params)
+                 EarlyStopping(monitor='val_loss', patience=10)]
     
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir=log_dir,
@@ -178,7 +188,7 @@ def main():
                          num_sanity_val_steps=0,
                          accumulate_grad_batches=
                             train_params['accumulate_grad_batches'],
-                         gradient_clip_val=1.0,
+                         gradient_clip_val=0.0,
                          max_epochs=train_params['n_epochs'],
                          max_steps=train_params['n_steps'],
                          check_val_every_n_epoch=None,

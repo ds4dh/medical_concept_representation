@@ -27,6 +27,14 @@ class FastText(nn.Module):
         nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
         nn.init.constant_(self.context_embeddings.weight.data, 0)
 
+    # THIS WOULD BE HOW TO USE MODELS WITH GDTUO, IF ONLY MANUAL_OPTIMIZATION
+    # WOULD NOT DEACTIVATE ALL CALLBACKS (SEE SUBSCRIBED GITHUB ISSUE)
+    # def forward(self, model_input):
+    #     # Parse input
+    #     pos_center = model_input['pos_center']
+    #     pos_context = model_input['pos_context']
+    #     if 'neg_context' in model_input.keys():
+    #         neg_context = model_input['neg_context']
     def forward(self, pos_center, pos_context, neg_context=None):
         # Softmax case
         if self.n_neg_samples == 0:
