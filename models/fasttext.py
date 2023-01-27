@@ -3,18 +3,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# Adapted from https://github.com/Andras7/word2vec-pytorch
 class FastText(nn.Module):
-    def __init__(self, vocab_sizes, d_embed, special_tokens, n_neg_samples,
+    # Adapted from https://github.com/Andras7/word2vec-pytorch
+    def __init__(self,
+                 vocab_sizes: dict,
+                 special_tokens: dict,
+                 d_embed: int,
+                 n_neg_samples: int,
                  *args, **kwargs):
         super(FastText, self).__init__()
         vocab_size = vocab_sizes['total']
         pad_id = special_tokens['[PAD]']
 
-        self.center_embeddings = \
-            nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
-        self.context_embeddings = \
-            nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
+        self.center_embeddings = nn.Embedding(
+            vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
+        self.context_embeddings = nn.Embedding(
+            vocab_size, d_embed, padding_idx=pad_id)  # sparse=True
         
         self.n_neg_samples = n_neg_samples
         if self.n_neg_samples == 0:
@@ -27,15 +31,10 @@ class FastText(nn.Module):
         nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
         nn.init.constant_(self.context_embeddings.weight.data, 0)
 
-    # THIS WOULD BE HOW TO USE MODELS WITH GDTUO, IF ONLY MANUAL_OPTIMIZATION
-    # WOULD NOT DEACTIVATE ALL CALLBACKS (SEE SUBSCRIBED GITHUB ISSUE)
-    # def forward(self, model_input):
-    #     # Parse input
-    #     pos_center = model_input['pos_center']
-    #     pos_context = model_input['pos_context']
-    #     if 'neg_context' in model_input.keys():
-    #         neg_context = model_input['neg_context']
-    def forward(self, pos_center, pos_context, neg_context=None):
+    def forward(self,
+                pos_center: torch.Tensor,
+                pos_context: torch.Tensor,
+                neg_context: torch.Tensor=None):
         # Softmax case
         if self.n_neg_samples == 0:
             pos_center = self.center_embeddings(pos_center)
@@ -56,15 +55,21 @@ class FastText(nn.Module):
                     'pos_context': pos_context,
                     'neg_context': neg_context}
                     
-    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+    def combine_ngram_embeddings(self,
+                                 x: torch.Tensor,
+                                 dim: int,
+                                 reduce: str='mean'):
+        """ Combine stacked ngram embedding vectors coming from subword tokens
+            or from a sequence of tokens, into a single embedding vector
+        """
         if reduce == 'mean':
             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
             return x.mean(dim=dim) / norm_factor
         else:
             return x.sum(dim=dim)
     
-    def get_token_embeddings(self, token_indices):
-        """ Compute static embeddings each token in a list
+    def get_token_embeddings(self, token_indices: list):
+        """ Compute static embeddings for a list of tokens as a stacked tensor
         """
         all_embeddings = self.center_embeddings.weight
         token_embeddings = []
@@ -75,8 +80,8 @@ class FastText(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, weights=None):
-        """ Compute static embedding of a token sequence
+    def get_sequence_embeddings(self, sequence: list, weights: list=None):
+        """ Compute a single static embedding vector for a sequence of tokens
         """
         embeddings = self.get_token_embeddings(sequence)
         return self.collapse_sequence_embeddings(embeddings, weights)
@@ -93,10 +98,11 @@ class FastText(nn.Module):
             
 
 class FastTextNegSamplingLoss(nn.Module):
+    # Adapted from https://github.com/Andras7/word2vec-pytorch
     def __init__(self):
         super().__init__()
 
-    def forward(self, model_output, *args, **kwargs):
+    def forward(self, model_output: torch.Tensor, *args, **kwargs):
         pos_center = model_output['pos_center']
         pos_context = model_output['pos_context']
         neg_context = model_output['neg_context']
@@ -118,7 +124,7 @@ class FastTextSoftMaxLoss(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output):
+    def forward(self, model_output: torch.Tensor):
         pos_center = model_output['pos_center']
         pos_context = model_output['pos_context']
         logits = self.log_softmax(pos_center)

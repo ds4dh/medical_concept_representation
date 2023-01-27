@@ -5,9 +5,18 @@ from torch import relu, sigmoid
 
 
 class ELMO(nn.Module):
-    def __init__(self, n_lstm_layers, d_lstm, d_embed_char, d_embed_word,
-                 d_conv, k_size, vocab_sizes, special_tokens, token_type,
-                 dropout=0.5, *args, **kwargs):
+    def __init__(self,
+                 n_lstm_layers: int,
+                 d_lstm: int,
+                 d_embed_char: int,
+                 d_embed_word: int,
+                 d_conv: list,
+                 k_size: list,
+                 vocab_sizes: dict,
+                 special_tokens: dict,
+                 token_type: str,
+                 dropout: float=0.5,
+                 *args, **kwargs):
         super().__init__()
         # Retrieve vocabulary information (char_shift for char embeddings)
         self.pad_id = special_tokens['[PAD]']
@@ -46,7 +55,7 @@ class ELMO(nn.Module):
         # Loss function used by the model
         self.loss_fn = ELMOLoss()
         
-    def forward(self, sample):
+    def forward(self, sample: torch.Tensor):
         """ Forward pass of the ELMO model
             - Inputs:
                 sample (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
@@ -56,7 +65,7 @@ class ELMO(nn.Module):
         context_emb = self.word_lstm(static_emb, return_all_states=False)
         return self.final_proj(context_emb)  # for pre-training
 
-    def parse_words_and_chars(self, sample):
+    def parse_words_and_chars(self, sample: torch.Tensor):
         if self.token_type in ['both', 'char']:
             chars = sample[:, :, 1:] - self.char_shift  # for char embedding
             chars[chars < 0] = self.pad_id  # only char special token: pad_id
@@ -69,7 +78,7 @@ class ELMO(nn.Module):
         else:  # 'word'
             return sample, None
         
-    def compute_static_embeddings(self, sample):
+    def compute_static_embeddings(self, sample: torch.Tensor):
         """ Create word static embeddings from characters and/or words
             - Inputs:
                 sample (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
@@ -90,14 +99,17 @@ class ELMO(nn.Module):
             word_emb = self.word_embedding(words)
             return self.combine_word_char_embeddings(char_emb, word_emb)
     
-    def combine_word_char_embeddings(self, char_emb, word_emb, reduce='mean'):
+    def combine_word_char_embeddings(self,
+                                     char_emb: torch.Tensor,
+                                     word_emb: torch.Tensor,
+                                     reduce: str='mean'):
         if reduce == 'mean':
             return (char_emb + word_emb) / 2
         else:
             return char_emb + word_emb
 
-    def get_token_embeddings(self, token_indices):
-        """ Compute static embeddings for a token list
+    def get_token_embeddings(self, token_indices: list):
+        """ Compute static embeddings for a list of tokens as a stacked tensor
         """
         device = self.get_device()
         embeddings = []
@@ -109,7 +121,9 @@ class ELMO(nn.Module):
         return torch.stack(embeddings, dim=0).detach().cpu()
     
     def get_sequence_embeddings(self,
-                                sequence, weights=None, mode='context_last'):
+                                sequence: list,
+                                weights: list=None,
+                                mode: str='context_last'):
         """ Compute embedding (static or contextualized) for a token sequence
         """
         sequence = self.pre_process_for_sequence(sequence)
@@ -125,7 +139,7 @@ class ELMO(nn.Module):
         embedded = self.collapse_sequence_embeddings(embedded, weights)
         return embedded.squeeze().detach().cpu()
     
-    def pre_process_for_sequence(self, sequence):
+    def pre_process_for_sequence(self, sequence: list):
         """ Add [EOS]/[BOS] tokens, trim too lengthy sequences, tensorize
         """
         if isinstance(sequence[0], list):  # ngram case
@@ -135,7 +149,10 @@ class ELMO(nn.Module):
             sequence.insert(0, self.bos_id); sequence.append(self.eos_id)
         return torch.tensor(sequence)[None, ...]  # add batch dimension
 
-    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+    def collapse_sequence_embeddings(self,
+                                     embeddings: torch.Tensor,
+                                     weights: list,
+                                     dim: int=-2):
         """ Average sequence embedding over sequence dimension
         """
         embeddings = embeddings[0, 1:-1]  # discard [BOS]/[EOS] token embeddings
@@ -160,7 +177,7 @@ class ELMOLoss(nn.Module):
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, sample):
+    def forward(self, model_output: torch.Tensor, sample: torch.Tensor):
         if len(sample.shape) > 2:  # ngram case
             sample = sample[:, :, 0]
         logits = self.log_softmax(model_output).transpose(2, 1)
@@ -168,7 +185,12 @@ class ELMOLoss(nn.Module):
     
 
 class CharCNN(nn.Module):
-    def __init__(self, d_convs, k_sizes, d_emb_char, d_emb_word, activ_fn=relu):
+    def __init__(self,
+                 d_convs: list,
+                 k_sizes: list,
+                 d_emb_char: int,
+                 d_emb_word: int,
+                 activ_fn=relu):
         super().__init__()
         self.conv_layers = nn.ModuleList([
             nn.Conv1d(in_channels=d_emb_char,
@@ -180,7 +202,7 @@ class CharCNN(nn.Module):
         self.highway = Highway(sum(d_convs), n_layers=2)
         self.word_emb_proj = nn.Linear(sum(d_convs), d_emb_word)
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         """ Forward pass of the character-cnn module
             - Input has shape (batch_size, seq_len, n_char_max, d_emb_char)
             - Output has shape (batch_size, seq_len, d_emb_word)
@@ -193,19 +215,23 @@ class CharCNN(nn.Module):
         concat = self._deshape(torch.cat(cnn_out_list, dim=-1))
         return self.word_emb_proj(self.highway(concat))
 
-    def _reshape(self, x):
+    def _reshape(self, x: torch.Tensor):
         self.batch_size, L, C, D = x.shape
         new_shape = (self.batch_size * L, C, D)
         return torch.reshape(x, new_shape).transpose(1, 2)
 
-    def _deshape(self, x):
+    def _deshape(self, x: torch.Tensor):
         BL, D_SUM = x.shape
         new_shape = (self.batch_size, int(BL / self.batch_size), D_SUM)
         return x.reshape(new_shape)
 
 
 class Highway(nn.Module):
-    def __init__(self, d_highway, n_layers=2, proj_fn=relu, gate_fn=sigmoid):
+    def __init__(self,
+                 d_highway: int,
+                 n_layers: int=2,
+                 proj_fn=relu,
+                 gate_fn=sigmoid):
         super().__init__()
         self.n_layers = n_layers
         self.proj_fn = proj_fn
@@ -215,7 +241,7 @@ class Highway(nn.Module):
         self.gate = nn.ModuleList([
             nn.Linear(d_highway, d_highway) for _ in range(n_layers)])
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         """ Forward pass of the highway module
             - Input has shape (batch_size, seq_len, d_highway)
             - Output has shape (batch_size, seq_len, d_highway)
@@ -229,7 +255,11 @@ class Highway(nn.Module):
     
  
 class WordLSTM(nn.Module):
-    def __init__(self, d_emb_word, d_lstm, n_lstm_layers=2, dropout=0.5):
+    def __init__(self,
+                 d_emb_word: int,
+                 d_lstm: int,
+                 n_lstm_layers: int=2,
+                 dropout: float=0.5):
         super().__init__()
         self.n_lstm_layers = n_lstm_layers
         self.forw_lstm = nn.ModuleList([nn.LSTM(input_size=d_emb_word,
@@ -245,7 +275,7 @@ class WordLSTM(nn.Module):
         self.forw_drop = nn.Dropout(dropout)
         self.back_drop = nn.Dropout(dropout)
         
-    def forward(self, x, return_all_states=False):
+    def forward(self, x: torch.Tensor, return_all_states: bool=False):
         """ Forward pass of the multi-layered bilateral lstm module
             - Input has shape (batch_size, seq_len, d_emb_word)
             - If return_all_states == True:
@@ -271,7 +301,9 @@ class WordLSTM(nn.Module):
         else:  # (batch_size, seq_len, 2 * d_emb_word)
             return torch.cat(context_embeddings[-2:], dim=-1)
     
-    def _combine_forward_and_backward(self, forw_out, back_out):
+    def _combine_forward_and_backward(self,
+                                      forw_out: torch.Tensor,
+                                      back_out: torch.Tensor):
         """ Align lstm backward and forward hidden states for language modeling
             - Both inputs have shape (batch_size, seq_len, d_emb_word)
             - Both outputs have shape (batch_siez, seq_len, d_emb_word)

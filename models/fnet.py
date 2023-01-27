@@ -7,14 +7,22 @@ from itertools import zip_longest
 
 
 class FNet(nn.Module):
-    def __init__(self, vocab_sizes, special_tokens, max_seq_len, d_embed,
-                 d_ff, n_layers, dropout=0.1, n_heads=None, *args, **kwargs):
+    def __init__(self,
+                 vocab_sizes: dict,
+                 special_tokens: dict,
+                 max_seq_len: int,
+                 d_embed: int,
+                 d_ff: int,
+                 n_layers: int,
+                 n_heads: int=None,
+                 dropout: float=0.1,
+                 *args, **kwargs):
         super().__init__()
         self.pad_id = special_tokens['[PAD]']
         self.bos_id = special_tokens['[CLS]']
         self.eos_id = special_tokens['[END]']
         self.mask_id = special_tokens['[MASK]']
-        self.loss_fn = BertLoss(mask_id=self.mask_id, max_seq_len=max_seq_len)
+        self.loss_fn = BertLoss(max_seq_len=max_seq_len)
 
         # Embedding layer (sum of positional, segment and token embeddings)
         self.max_seq_len = max_seq_len
@@ -37,7 +45,10 @@ class FNet(nn.Module):
         # Final projection to predict words for each masked token
         self.final_proj = nn.Linear(d_embed, vocab_sizes['total'])
 
-    def forward(self, masked, segment_labels=None, get_embeddings=False):
+    def forward(self,
+                masked: torch.Tensor,
+                segment_labels: torch.Tensor=None,
+                get_embeddings: bool=False):
         # Embed token sequences to vector sequences
         pad_mask = self.create_pad_mask(masked)
         x = self.embedding(masked, segment_labels)
@@ -50,7 +61,7 @@ class FNet(nn.Module):
         # Return embeddings or word projections
         return x if get_embeddings else self.final_proj(x)
 
-    def create_pad_mask(self, masked):
+    def create_pad_mask(self, masked: torch.Tensor):
         # Adapt the size of the array used to build the masks
         input_for_masks = masked
         if len(input_for_masks.shape) > 2:  # ngram case
@@ -60,7 +71,7 @@ class FNet(nn.Module):
         pad_mask = (input_for_masks != self.mask_id).unsqueeze(1)
         return pad_mask.repeat(1, masked.size(1), 1).unsqueeze(1)
     
-    def get_token_embeddings(self, token_indices):
+    def get_token_embeddings(self, token_indices: list):
         """ Compute static embeddings for a list of tokens
         """
         embedder = self.embedding
@@ -73,7 +84,10 @@ class FNet(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, weights=None, mode='context_avg'):
+    def get_sequence_embeddings(self,
+                                sequence: list,
+                                weights: list=None,
+                                mode: str='context_avg'):
         """ Compute embedding (static or contextualized) for a token sequence
         """
         if mode == 'static':
@@ -92,7 +106,7 @@ class FNet(nn.Module):
 
         return embedded.squeeze().detach().cpu()
 
-    def pre_process_for_sequence(self, sequence):
+    def pre_process_for_sequence(self, sequence: list):
         """ Add [EOS]/[BOS] tokens, trim too lengthy sequences, tensorize
         """
         if isinstance(sequence[0], list):  # ngram case
@@ -104,7 +118,10 @@ class FNet(nn.Module):
             sequence = sequence[:self.max_seq_len]
         return torch.tensor(sequence)[None, ...]  # add batch dimension
     
-    def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
+    def collapse_sequence_embeddings(self,
+                                     embeddings: torch.Tensor,
+                                     weights: list,
+                                     dim: int=-2):
         """ Average sequence embedding over sequence dimension
         """
         if len(embeddings.shape) > 2:  # context_avg case
@@ -121,14 +138,16 @@ class FNet(nn.Module):
     
 
 class BertLoss(nn.Module):
-    def __init__(self, mask_id, max_seq_len):
+    def __init__(self, max_seq_len: int):
         super().__init__()
-        self.mask_id = mask_id
         self.max_seq_len = max_seq_len
         self.log_softmax = nn.LogSoftmax(dim=-1)
         self.nlll_loss = nn.NLLLoss()
 
-    def forward(self, model_output, masked_label_ids, masked_label):
+    def forward(self,
+                model_output: torch.Tensor,
+                masked_label_ids: list,
+                masked_label: list):
         # Retrieve indexes of masked tokens and their values
         seq_len = model_output.shape[1]
         msk_ids, msk_lbls = [], []
@@ -145,7 +164,7 @@ class BertLoss(nn.Module):
 
 
 class FeedForward(nn.Module):
-    def __init__(self, d_embed, d_ff, dropout = 0.1):
+    def __init__(self, d_embed: int, d_ff: int, dropout: float=0.1):
         super().__init__()
         self.net = nn.Sequential(nn.Linear(d_embed, d_ff),
                                  nn.GELU(),
@@ -153,18 +172,18 @@ class FeedForward(nn.Module):
                                  nn.Linear(d_ff, d_embed),
                                  nn.Dropout(dropout))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return self.net(x)
 
 
 class Norm(nn.Module):
-    def __init__(self, dim, fn, mode='pre'):
+    def __init__(self, dim: int, fn: nn.Module, mode: str='pre'):
         super().__init__()
         self.norm = nn.LayerNorm(dim)
         self.fn = fn
         self.mode = mode
 
-    def forward(self, x, **kwargs):
+    def forward(self, x: torch.Tensor, **kwargs):
         if self.mode == 'pre':
             return self.fn(self.norm(x), **kwargs)
         elif self.mode == 'post':
@@ -177,12 +196,12 @@ class FourierLayer(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, x, *args, **kwargs):
+    def forward(self, x: torch.Tensor, *args, **kwargs):
         return torch.fft.fft(torch.fft.fft(x, dim=-1), dim=-2).real
 
 
 class MultiHeadedAttention(nn.Module):
-    def __init__(self, n_heads, d_embed, dropout=0.1):
+    def __init__(self, n_heads: int, d_embed: int, dropout: float=0.1):
         super().__init__()
         assert d_embed % n_heads == 0
         self.d_embed = d_embed
@@ -195,13 +214,16 @@ class MultiHeadedAttention(nn.Module):
         self.attention = Attention()
         self.dropout = nn.Dropout(p=dropout)
 
-    def _split_by_head(self, x, batch_size):
+    def _split_by_head(self, x: torch.Tensor, batch_size: int):
         return x.view(batch_size, -1, self.n_heads, self.d_head).transpose(1, 2)
     
-    def _combine_heads(self, x, batch_size):
+    def _combine_heads(self, x: torch.Tensor, batch_size: int):
         return x.transpose(1, 2).contiguous().view(batch_size, -1, self.d_embed)
 
-    def forward(self, x, mask=None, return_attention=False):
+    def forward(self,
+                x: torch.Tensor,
+                mask: torch.Tensor=None,
+                return_attention: bool=False):
         batch_size = x.size(0)
         q = self._split_by_head(self.q_linear(x), batch_size)
         k = self._split_by_head(self.k_linear(x), batch_size)
@@ -215,7 +237,12 @@ class MultiHeadedAttention(nn.Module):
 
 
 class Attention(nn.Module):
-    def forward(self, q, k, v, mask=None, dropout=None):
+    def forward(self,
+                q: torch.Tensor,
+                k: torch.Tensor,
+                v: torch.Tensor,
+                mask: torch.Tensor=None,
+                dropout: float=None):
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(q.size(-1))
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e9)
@@ -226,14 +253,21 @@ class Attention(nn.Module):
 
 
 class BertEmbedding(nn.Module):
-    def __init__(self, vocab_size, pad_id, max_len, d_embed, dropout=0.1):
+    def __init__(self,
+                 vocab_size: int,
+                 pad_id: int,
+                 max_len: int,
+                 d_embed: int,
+                 dropout:float=0.1):
         super().__init__()
         self.tok = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
         self.pos = PositionalEmbedding(d_embed, max_len=max_len)
         self.seg = nn.Embedding(3, d_embed)
         self.dropout = nn.Dropout(p=dropout)
 
-    def forward(self, sequence, segment_labels):
+    def forward(self,
+                sequence: torch.Tensor,
+                segment_labels: torch.Tensor):
         # Create an idle segment mask if none is used
         if segment_labels == None:
             sequence_for_lbls = sequence
@@ -251,7 +285,13 @@ class BertEmbedding(nn.Module):
         x = tok_emb + self.pos(sequence) + self.seg(segment_labels)
         return self.dropout(x)
 
-    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+    def combine_ngram_embeddings(self,
+                                 x: torch.Tensor,
+                                 dim: int,
+                                 reduce: str='mean'):
+        """ Combine stacked ngram embedding vectors coming from subword tokens
+            or from a sequence of tokens, into a single embedding vector
+        """
         if reduce == 'mean':
             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
             return x.mean(dim=dim) / norm_factor
@@ -260,7 +300,7 @@ class BertEmbedding(nn.Module):
 
 
 class PositionalEmbedding(nn.Module):
-    def __init__(self, d_embed, max_len):
+    def __init__(self, d_embed: int, max_len: int):
         super().__init__()
         pe = torch.zeros(max_len, d_embed).float()
         pe.require_grad = False
@@ -274,5 +314,5 @@ class PositionalEmbedding(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return self.pe[:, :x.size(1)]

@@ -6,8 +6,16 @@ import torch.nn.functional as F
 
 class Transformer(nn.Module):
     def __init__(self,
-                 n_enc_layers, n_dec_layers, d_embed, d_ff, n_heads, dropout,
-                 max_seq_len, special_tokens, vocab_sizes, share_embeddings,
+                 n_enc_layers: int,
+                 n_dec_layers: int,
+                 d_embed: int,
+                 d_ff: int,
+                 n_heads: int,
+                 dropout: float,
+                 max_seq_len: int,
+                 special_tokens: dict,
+                 vocab_sizes: dict,
+                 share_embeddings: bool,
                  *args, **kwargs):
         ''' Initialize a Transformer model for seq to seq translation,
             using as much as possible the torch.nn transformer modules.

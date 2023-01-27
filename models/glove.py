@@ -6,7 +6,11 @@ class Glove(nn.Module):
     """ Glove model
     """
 
-    def __init__(self, vocab_sizes, special_tokens, d_embed, *args, **kwargs):
+    def __init__(self,
+                 vocab_sizes: dict,
+                 special_tokens: dict,
+                 d_embed: int,
+                 *args, **kwargs):
         super().__init__()
         assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
         pad_id = special_tokens['[PAD]']
@@ -17,7 +21,7 @@ class Glove(nn.Module):
         self.r_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
         self.loss_fn = GloveLoss()
 
-    def forward(self, left, right):
+    def forward(self, left: torch.Tensor, right: torch.Tensor):
         # Compute embeddings
         l_v = self.l_emb(left)
         l_b = self.l_bias(left)
@@ -33,15 +37,21 @@ class Glove(nn.Module):
                     
         return (l_v * r_v).sum(dim=-1) + l_b.squeeze() + r_b.squeeze()
     
-    def combine_ngram_embeddings(self, x, dim, reduce='mean'):
+    def combine_ngram_embeddings(self,
+                                 x: torch.Tensor,
+                                 dim: int,
+                                 reduce: str='mean'):
+        """ Combine stacked ngram embedding vectors coming from subword tokens
+            or from a sequence of tokens, into a single embedding vector
+        """
         if reduce == 'mean':
             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
             return x.mean(dim=dim) / norm_factor
         else:
             return x.sum(dim=dim)
     
-    def get_token_embeddings(self, token_indices):
-        """ Compute static embeddings for a list of tokens
+    def get_token_embeddings(self, token_indices: list):
+        """ Compute static embeddings for a list of tokens as a stacked tensor
         """
         all_embeddings = self.l_emb.weight + self.r_emb.weight
         token_embeddings = []
@@ -52,8 +62,8 @@ class Glove(nn.Module):
             token_embeddings.append(embedded)
         return torch.stack(token_embeddings, dim=0).detach().cpu()
     
-    def get_sequence_embeddings(self, sequence, weights=None):
-        """ Compute static embedding for a sequence of tokens
+    def get_sequence_embeddings(self, sequence: list, weights: list=None):
+        """ Compute a single static embedding vector for a sequence of tokens
         """
         embeddings = self.get_token_embeddings(sequence)
         return self.collapse_sequence_embeddings(embeddings, weights)
@@ -71,7 +81,7 @@ class Glove(nn.Module):
 class GloveLoss(nn.Module):
     """ Loss for the GloVe Model
     """
-    def __init__(self, x_max=100, alpha=3/4, reduce='sum'):
+    def __init__(self, x_max: int=100, alpha: float=3/4, reduce: str='sum'):
         """ Hyperparameters as in the original article.
         """
         super().__init__()
@@ -79,14 +89,14 @@ class GloveLoss(nn.Module):
         self.a = alpha
         self.reduce = reduce
 
-    def normalize(self, t):
+    def normalize(self, t: torch.Tensor):
         """ Normalization as in the original article.
         """
         return torch.where(t < self.m,
                            (t / self.m) ** self.a,
                            torch.ones_like(t))
     
-    def forward(self, model_output, cooc):
+    def forward(self, model_output: torch.Tensor, cooc: torch.Tensor):
         """ Expects flattened model output and target coocurence matrix.
         """
         n_t = self.normalize(cooc)

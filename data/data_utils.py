@@ -1,6 +1,5 @@
 import json
 import torch
-from collections import OrderedDict
 from functools import partial
 from itertools import zip_longest
 from torchdata.datapipes.iter import (

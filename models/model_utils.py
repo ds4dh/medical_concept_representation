@@ -5,7 +5,7 @@ import torch
 import models
 
 
-def load_model_and_params_from_config(config_path):
+def load_model_and_params_from_config(config_path: str):
     ''' Load model, training and data parameters, using a config file
     
     Params:
@@ -62,7 +62,8 @@ def load_model_and_params_from_config(config_path):
     return model, run_params, data_params, train_params, model_params
 
 
-def update_class_info_for_bert_classifier(data_params, model_params):
+def update_class_info_for_bert_classifier(data_params: dict,
+                                          model_params: dict):
     """ Update data and bert classifier parameters with class information
         TODO: put all this (specific to task, e.g., here, reagent prediction)
         TODO: in data/task/parsing (but hard because model loss_fn need update)
@@ -84,7 +85,9 @@ def update_class_info_for_bert_classifier(data_params, model_params):
             model_params['n_classes'] = len(dicts)
             
 
-def update_params_for_bert_classifier(config, model_name, model_params):
+def update_params_for_bert_classifier(config: dict,
+                                      model_name: str,
+                                      model_params: dict):
     """ Update parameters of bert classifier with parameters of bert    
     """
     # Try to find the corresponding BERT model ckpt for the BERT classifier
@@ -118,7 +121,11 @@ def update_params_for_bert_classifier(config, model_name, model_params):
             model_params[k] = v
 
 
-def load_checkpoint(model_name, exp_id, model_version, load_model, **kwargs):
+def load_checkpoint(model_name: str,
+                    exp_id: str,
+                    model_version: int,
+                    load_model: bool,
+                    **kwargs):
     """ Try to find a checkpoint path for the model from the log directory.
         If no checkpoint is found, None is returned (start from scratch).
     """
@@ -132,7 +139,7 @@ def load_checkpoint(model_name, exp_id, model_version, load_model, **kwargs):
     return ckpt_path, log_dir, model_version
 
 
-def find_existing_checkpoint(model_dir):
+def find_existing_checkpoint(model_dir: str):
     """ Try to find checkpoint and initialize a new directory if not found
     """
     try:
@@ -149,7 +156,7 @@ def find_existing_checkpoint(model_dir):
         return None
     
 
-def initialize_new_checkpoint_dir(model_dir, model_version):
+def initialize_new_checkpoint_dir(model_dir: str, model_version: int):
     """ Try to initialize a new checkpoint directory but avoid overwriting
     """
     directory_not_empty = True
@@ -166,7 +173,10 @@ def initialize_new_checkpoint_dir(model_dir, model_version):
     return model_version
 
 
-def update_and_save_config(config_path, run_params, model_name, new_model_version):
+def update_and_save_config(config_path: str,
+                           run_params: dict,
+                           model_name: str,
+                           new_model_version: int):
     """ Update the configuration parameters and save it as a .toml file in the
         model logs folder, so that all parameters are known for that run
 
@@ -203,7 +213,7 @@ def update_and_save_config(config_path, run_params, model_name, new_model_versio
                 new_config_file.write(line)
 
 
-def set_environment(num_workers):
+def set_environment(num_workers: int):
     """ Update environment if needed and check how many gpu can be used 
     """
     if num_workers > 0:

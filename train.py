@@ -173,7 +173,6 @@ def main():
     
     # Callbacks for logging and checkpointing
     callbacks = [LearningRateMonitor(logging_interval='step'),
-                 # ModelCheckpoint(),  # already there (if with default params)
                  EarlyStopping(monitor='val_loss', patience=10)]
     
     # Set a logger to monitor progress on tensorboard

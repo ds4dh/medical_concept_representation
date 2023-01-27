@@ -1,6 +1,6 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'glove'
+  model_used = 'fasttext'
   model_version = 0  # will increase to avoid overwriting until version is unique
   exp_id = 'test'  # 'icd-tokenization'
   ngram_mode = 'word'  # 'word', 'subword', 'icd'
