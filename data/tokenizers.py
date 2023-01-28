@@ -1,35 +1,38 @@
-import numpy as np
+import os
 import hashlib
+import numpy as np
 from nltk.util import ngrams as ngram_base_fn
 
 
 class Tokenizer():
-    """ Word-level tokenizer.
-        
+    def __init__(self,
+                 data_dir: str,
+                 special_tokens: dict,
+                 min_freq: int=5):
+        """ Initialize word-level tokenizer.
+            
         Parameters
         ----------
-        special_tokens (list of str)
-            tokens used in the model for unknown words, padding, masking,
-            starting/closing sentences, etc.
-        min_freq (int)
-            minimum frequency at which a word should occur in the corpus to have
-            its own token_id (else: token_id of '[UNK]')
-
-    """
-    def __init__(self, special_tokens, min_freq=5):
+            special_tokens (list of str)
+                tokens used in the model for unknown words, padding, masking,
+                starting/closing sentences, etc.
+            min_freq (int)
+                minimum frequency at which a word should occur in the corpus to have
+                its own token_id (else: token_id of '[UNK]')
+                
+        """
+        self.data_dir = data_dir
         self.encoder = dict(special_tokens)
         self.special_tokens = dict(special_tokens)
         self.min_freq = min_freq
         self.unique_id = self.create_unique_id()
-    
+        self.path = os.path.join(self.data_dir, 'tokenizer', self.unique_id)
+        
     def create_unique_id(self):
         unique_str = str(vars(self))
         return hashlib.sha256(unique_str.encode()).hexdigest()
 
-    def fit(self, words):
-        print(' - Training tokenizer')
-        assert isinstance(words, list)
-        
+    def fit(self, words: list):        
         # Compute and sort vocabulary
         word_vocab, word_counts = np.unique(words, return_counts=True)
         if self.min_freq > 0:  # remove rare words
@@ -37,32 +40,31 @@ class Tokenizer():
             word_counts = word_counts[word_counts >= self.min_freq]
         inds = word_counts.argsort()[::-1]
         word_vocab = word_vocab[inds]
-
+        
         # Generate word level encoder
         self.encoder.update({i: (idx + len(self.special_tokens))
                              for idx, i in enumerate(word_vocab)})
-                
+        
         # Store word count for every word (useful for skipgram dataset)
         self.word_counts = {self.encoder[word]: count for word, count in \
                             zip(word_vocab, sorted(word_counts)[::-1])}
         self.word_counts.update({k: 1 for k in self.special_tokens.values()})
-
-        # Decoder
+        
+        # Build decoder
         self.decoder = {v: k for k, v in self.encoder.items()}
         
         # Store and print tokenizer vocabulary information
         self.vocab_sizes = {'total': len(self.encoder),
                             'special': len(self.special_tokens),
                             'word': len(word_vocab)}
-        print(' - Vocabulary sizes: %s' % self.vocab_sizes)
         
-    def encode(self, word):
+    def encode(self, word: str):
         try:
             return self.encoder[word]
         except:
             return self.encoder['[UNK]']
     
-    def decode(self, token_id):
+    def decode(self, token_id: int):
         return self.decoder[token_id]
     
     def get_vocab(self):
@@ -70,31 +72,39 @@ class Tokenizer():
 
 
 class SubWordTokenizer():
-    """ Subword-level tokenizer.
+    def __init__(self,
+                 data_dir: str,
+                 special_tokens: dict,
+                 ngram_min_len: int,
+                 ngram_max_len: int,
+                 ngram_mode: str,
+                 ngram_base_prefixes: list,
+                 ngram_base_suffixes: list,
+                 min_freq: int=5,
+                 brackets: list=['<', '>'],
+                 *args, **kwargs):
+        """ Initialize Subword-level tokenizer.
 
         Parameters
         ----------
-        ngram_min_len (int)
-            minimum length of ngrams in tokenized subwords
-        ngram_max_len (int)
-            maximum length of ngrams in tokenized subwords
-        special_tokens (list of str)
-            tokens used in the model for unknown words, padding, masking,
-            starting/closing sentences, etc.
-        min_freq (int)
-            minimum frequency at which a word should occur in the corpus to have
-            its own token_id (else: token_id of '[UNK]')
-        brackets (list of 2 str)
-            special characters used to differentiate similar words and subwords
-            (e.g., word '<her>' vs subword 'her' subword word <where>)
-        mode (str)
-            how ngrams are computed ('subword' for classic ngrams, 'icd' for
-            ngrams suited to icd codes (forward-only ngrams))
-    
-    """
-    def __init__(self, ngram_min_len, ngram_max_len, ngram_mode,
-                 ngram_base_prefixes, ngram_base_suffixes, special_tokens,
-                 min_freq=5, brackets=['<', '>']):
+            ngram_min_len (int)
+                minimum length of ngrams in tokenized subwords
+            ngram_max_len (int)
+                maximum length of ngrams in tokenized subwords
+            special_tokens (list of str)
+                tokens used in the model for unknown words, padding, masking,
+                starting/closing sentences, etc.
+            min_freq (int)
+                minimum frequency at which a word should occur in the corpus to have
+                its own token_id (else: token_id of '[UNK]')
+            brackets (list of 2 str)
+                special characters used to differentiate similar words and subwords
+                (e.g., word '<her>' vs subword 'her' subword word <where>)
+            mode (str)
+                how ngrams are computed ('subword' for classic ngrams, 'icd' for
+                ngrams suited to icd codes (forward-only ngrams))
+        
+        """
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
         assert ngram_min_len >= 0 and ngram_max_len >= ngram_min_len

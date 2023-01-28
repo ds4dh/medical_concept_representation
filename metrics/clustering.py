@@ -1,10 +1,7 @@
 import numpy as np
-import matplotlib
-# matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-# all_colors = ['b', 'g', 'r', 'c', 'm', 'y', 'w'] * 10
 all_colors = (list(plt.cm.tab10(np.arange(10))) + ["crimson", "indigo"]) * 10
 
 
@@ -36,6 +33,7 @@ def clustering_task_ehr(model, tokenizer):
     plt.tight_layout()
     plt.show()
 
+
 def compute_reduced_representation(embeddings, algorithm='pca', n_dims=2):
     if algorithm == 'pca':
         return PCA().fit_transform(embeddings)[:, :n_dims]
@@ -44,6 +42,7 @@ def compute_reduced_representation(embeddings, algorithm='pca', n_dims=2):
         return TSNE(n_dims, **params).fit_transform(embeddings)
     else:
         raise ValueError('Invalid algorithm name (pca, tsne).')
+
 
 def get_token_info(model, tokenizer, cat):
     vocab = tokenizer.get_vocab()
@@ -59,5 +58,3 @@ def get_token_info(model, tokenizer, cat):
     embeddings = model.get_token_embeddings(encoded)
     initials = np.array([token.split('_')[-1][pos] for token in tokens])
     return {'tokens': tokens, 'embedded': embeddings, 'initials': initials}
-
-# clustering_task_ehr(model, tokenizer) commented to not run automatically

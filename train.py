@@ -9,8 +9,6 @@ from pytorch_lightning.callbacks import (
     LearningRateMonitor,
     ModelCheckpoint,
     EarlyStopping,
-    StochasticWeightAveraging,
-    BatchSizeFinder
 )
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
@@ -126,10 +124,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        metrics.evaluate(self.pipeline.tokenizer,
-                         self.model,
-                         self.logger,
-                         categorization_strategy='prefix_codes')
+        print('Evaluating trained model')
+        metrics.visualization_task_ehr(self.pipeline.tokenizer,
+                                       self.model,
+                                       self.logger)
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
 
@@ -182,8 +180,7 @@ def main():
     callbacks = [ModelCheckpoint(every_n_train_steps=100),
                  EarlyStopping(monitor='val_loss', patience=4)]
     if TRAIN_PARAMS['optimizer'] != 'gdtuo':
-        callbacks.extend([LearningRateMonitor(logging_interval='step'),
-                          StochasticWeightAveraging(swa_lrs=0.05)])
+        callbacks.extend([LearningRateMonitor(logging_interval='step')])
         
     # Set a logger to monitor progress on tensorboard
     logger = pl.loggers.TensorBoardLogger(save_dir=log_dir,
@@ -208,7 +205,7 @@ def main():
     
     # Train, then test model
     trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
-    trainer.test(ckpt_path=ckpt_path)  # trainer.test(ckpt_path='last')
+    trainer.test(model_data_wrapper, ckpt_path=ckpt_path)  # 'last')
 
 
 if __name__ == '__main__':

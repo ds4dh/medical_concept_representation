@@ -1,6 +1,6 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'glove'
+  model_used = 'fasttext'
   model_version = 0  # will increase to avoid overwriting until version is unique
   exp_id = 'test'  # 'icd-tokenization'
   ngram_mode = 'word'  # 'word', 'subword', 'icd'
@@ -10,7 +10,7 @@
   ngram_base_suffixes = [':OK', ':AB']  # only used for ngram_mode != 'word'
   debug = false  # if true, will use the smaller validation data as the training data
   load_model = false  # note: changing ngram_len will change embedding layer
-  load_tokenizer = false  # TODO: implement this
+  load_tokenizer = false
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
@@ -21,7 +21,7 @@
   max_seq_len = 512
 
 [train]
-  optimizer = 'gdtuo'  # adam, radam, adamw, gdtuo
+  optimizer = 'adamw'  # adam, radam, adamw, gdtuo
   scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer = gdtuo)
   lr = 0.001  # initial learning rate (after warmup; not used if optimizer = gdtuo)
   betas = [0.9, 0.998]  # initial momentum (not used if optimizer = gdtuo)
@@ -29,10 +29,10 @@
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 16_384  # 4_096  # 16_384  # 65_536
   n_epochs = 0  # total training epochs: if n_epochs set to 0, n_steps will be used
-  n_steps = 100_000  # total training steps: only used if n_epochs is set to 0
-  n_steps_check_val = 10_000  # how many training steps between each validation
-  n_sched_steps = 100_000
-  n_sched_warmup_steps = 1_000
+  n_steps = 10_000  # total training steps: only used if n_epochs is set to 0
+  n_steps_check_val = 1_000  # how many training steps between each validation
+  n_sched_steps = 100_000  # (not used if optimizer = gdtuo)
+  n_sched_warmup_steps = 1_000  # (not used if optimizer = gdtuo)
 
 [models]
   [models.fasttext]

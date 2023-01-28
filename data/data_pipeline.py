@@ -1,8 +1,7 @@
 import os
+import pickle
 import data
 import data.tasks as tasks
-from tqdm import tqdm
-from itertools import chain
 
 
 class DataPipeline():
@@ -33,30 +32,11 @@ class DataPipeline():
         
         # Build task-specific pipeline
         dp = data.JsonReader(self.data_fulldir, split)
-        dp = self.select_parse_pipeline(dp, task)
         dp = data.Encoder(dp, self.tokenizer)
         dp = self.select_task_pipeline(dp, task, split)
         dp = data.CustomBatcher(dp, self.max_tokens, self.max_seq_len, shuffle)
         dp = data.TorchPadder(dp, self.tokenizer)
         return dp
-    
-    def select_parse_pipeline(self, dp, task):
-        """ Set how data is parsed for the model after being read
-        """
-        if task in ['skipgram', 'cooc', 'lm', 'mlm']:
-            return dp
-        elif task == 'reagent_pred_mt':
-            return tasks.ReagentPredParser(dp, task)
-        elif task == 'reagent_pred_mlm':
-            return tasks.ReagentPredParser(dp, task)
-        elif task == 'reagent_pred_cls':
-            return tasks.ReagentPredParser(
-                                    dp,
-                                    task=task,
-                                    data_dir=self.data_fulldir,
-                                    n_classes=self.model_params['n_classes'])
-        else:
-            raise Exception('Invalid task given to the pipeline %s' % task)
         
     def select_task_pipeline(self, dp, task, split):
         """ Set the pipeline specific to the task of the model
@@ -80,38 +60,48 @@ class DataPipeline():
     def get_tokenizer(self, model_params, run_params):
         """ Load and train a tokenizer with / without ngrams
         """
-        print('Setting up tokenizer')
-        # Load the tokenizer
-        if run_params['ngram_mode'] == 'word':
-            tokenizer = data.Tokenizer(model_params['special_tokens'])
-        elif run_params['ngram_mode'] in ['subword', 'icd', 'char']:
-            tokenizer = data.SubWordTokenizer(run_params['ngram_min_len'],
-                                              run_params['ngram_max_len'],
-                                              run_params['ngram_mode'],
-                                              run_params['ngram_base_prefixes'],
-                                              run_params['ngram_base_suffixes'],
-                                              model_params['special_tokens'])
-        else:
-            raise Exception('Invalid ngram mode given to the pipeline.')
+        # Initialize the correct tokenizer
+        valid_ngram_modes = ['word', 'subword', 'icd', 'char']
+        assert run_params['ngram_mode'] in valid_ngram_modes,\
+            'Invalid ngram mode given to the pipeline %s.' % valid_ngram_modes
+        print('Creating %s tokenizer' % run_params['ngram_mode'])
+        tokenizer = self.initialize_tokenizer(run_params, model_params)
         
-        # Figure out which type of input the tokenizer should encode
-        if 'tokenizer_task' in model_params:
-            tokenizer_task = model_params['tokenizer_task']
-        else:
-            tokenizer_task = model_params['task']
-
-        # Build a pipeline for the tokenizer, given the task of the model
-        split = 'val' if self.debug else 'train'
-        dp = data.JsonReader(self.data_fulldir, split)
-        dp = self.select_parse_pipeline(dp, tokenizer_task)
+        # Try to load the tokenizer, only if wanted, and return it if found
+        print(' - Loading tokenizer from %s' % tokenizer.path)
+        try:
+            with open(tokenizer.path, 'rb') as tokenizer_file:
+                loaded_tokenizer = pickle.load(tokenizer_file)
+                return loaded_tokenizer
+        except:
+            print(' - Tokenizer not found, retraining it')
         
-        # Train the tokenizer with the training data (validation if debug mode)
-        tokenizer_training_batches = []
-        for sample in tqdm(dp, desc=' - Building tokenizer data'):
-            if isinstance(sample, dict):  # avoid taking label indices as tokens
-                sample = {k: v for k, v in sample.items() if 'label' not in k}
-                sample = list(chain(*list(sample.values())))
-            tokenizer_training_batches.extend(sample)
-        tokenizer.fit(tokenizer_training_batches)
-
+        # If tokenizer was not loaded, train the tokenizer using train dataset
+        dp = data.JsonReader(self.data_fulldir, 'train')
+        list_with_all_data = [token for sentence in dp for token in sentence]
+        tokenizer.fit(list_with_all_data)
+        print(' - Trained tokenizer - vocabulary: %s' % tokenizer.vocab_sizes)
+        
+        # Save the trained tokenizer and return it
+        if run_params['debug']: tokenizer.path
+        os.makedirs(os.path.split(tokenizer.path)[0], exist_ok=True)
+        with open(tokenizer.path, 'wb') as handle:
+            pickle.dump(tokenizer, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        print(' - Saved tokenizer at %s' % tokenizer.path)
         return tokenizer
+        
+    def initialize_tokenizer(self, run_params, model_params):
+        """ Initialize correct tokenizer, given simulation and model parameters
+        """
+        if run_params['ngram_mode'] == 'word':
+            return data.Tokenizer(
+                data_dir=self.data_fulldir,
+                special_tokens=model_params['special_tokens']
+            )
+        elif run_params['ngram_mode'] in ['subword', 'icd', 'char']:
+            return data.SubWordTokenizer(
+                data_dir=self.data_fulldir,
+                special_tokens=model_params['special_tokens'],
+                **run_params
+            )
+        
