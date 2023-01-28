@@ -87,7 +87,7 @@ class Transformer(nn.Module):
         self.loss_fn = TransformerLoss(pad_id)
         
 
-    def forward(self, src, tgt):
+    def forward(self, input_dict: dict):
         ''' Forward pass of the Transformer model.
 
         Params:
@@ -104,13 +104,13 @@ class Transformer(nn.Module):
         
         '''
         # Define attention masks for encoding, memory and decoding
-        masks = self.make_masks(src, tgt)
+        masks = self.make_masks(input_dict['src'], input_dict['tgt'])
         src_pad_mask, mem_pad_mask, tgt_pad_mask, src_mask, tgt_mask = masks
         
         # Vocab and positional embedding of source and target tokens
-        src_embedded = self.src_embedding(src)
+        src_embedded = self.src_embedding(input_dict['src'])
         src_embedded += self.pos_embedding(src_embedded)
-        tgt_embedded = self.tgt_embedding(tgt)
+        tgt_embedded = self.tgt_embedding(input_dict['tgt'])
         tgt_embedded += self.pos_embedding(tgt_embedded)
         
         # Run the model with the embedded tokens

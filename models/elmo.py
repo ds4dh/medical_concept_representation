@@ -55,13 +55,13 @@ class ELMO(nn.Module):
         # Loss function used by the model
         self.loss_fn = ELMOLoss()
         
-    def forward(self, sample: torch.Tensor):
+    def forward(self, input_dict: dict):
         """ Forward pass of the ELMO model
             - Inputs:
                 sample (batch_size, seq_len, ngram_len) or (batch_size, seq_len)
             - Output (batch_size, seq_len, d_emb_word)
         """
-        static_emb = self.compute_static_embeddings(sample)
+        static_emb = self.compute_static_embeddings(input_dict['sample'])
         context_emb = self.word_lstm(static_emb, return_all_states=False)
         return self.final_proj(context_emb)  # for pre-training
 
@@ -74,7 +74,6 @@ class ELMO(nn.Module):
                 return words, chars
             else:
                 return None, chars
-        
         else:  # 'word'
             return sample, None
         

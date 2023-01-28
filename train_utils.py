@@ -7,10 +7,12 @@ from gradient_descent_the_ultimate_optimizer import gdtuo
 def select_optimizer(model, train_params):
     # Hyper-optimization
     if train_params['optimizer'] == 'gdtuo':
-        optim = gdtuo.Adam(optimizer=gdtuo.Adam(alpha=train_params['lr']))
-        mw = gdtuo.ModuleWrapper(model, optimizer=optim)
-        mw.initialize()
-        return mw
+        hyper_optim = gdtuo.SGD(alpha=1e-5)  # train_params['lr'])
+        optim = gdtuo.Adam(optimizer=hyper_optim)
+        gdtuo_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
+        gdtuo_wrapper.initialize()
+        dummy_optim = torch.optim.Adam([torch.empty(0)])
+        return gdtuo_wrapper, dummy_optim
 
     # Classic optimization
     optim_params = {'params': model.parameters(),

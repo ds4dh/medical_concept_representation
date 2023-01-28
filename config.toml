@@ -1,6 +1,6 @@
 [run]
   # Possible models: 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
-  model_used = 'fasttext'
+  model_used = 'glove'
   model_version = 0  # will increase to avoid overwriting until version is unique
   exp_id = 'test'  # 'icd-tokenization'
   ngram_mode = 'word'  # 'word', 'subword', 'icd'
@@ -17,17 +17,15 @@
 [data]
   data_dir = './data/datasets/autophe'
   data_subdir = 'time_categorized_atc'  # time_categorized, time_categorized_atc, time_not_categorized
-  # data_dir = './data/datasets/chempred/uspto-mit/reagent_pred'
-  # data_subdir = 'smiles'
   log_dir = './logs'
   max_seq_len = 512
 
 [train]
-  optimizer = 'adamw'  # adam, radam, adamw, DO NOT USE gdtuo FOR NOW (buggy)
+  optimizer = 'gdtuo'  # adam, radam, adamw, gdtuo
   scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer = gdtuo)
-  lr = 0.001  # initial learning rate (after warmup)
-  betas = [0.9, 0.998]  # initial momentum
-  weight_decay = 0.01  # initial weight decay (note: [adam, radam] and adamw have different ways of applying weight decay)
+  lr = 0.001  # initial learning rate (after warmup; not used if optimizer = gdtuo)
+  betas = [0.9, 0.998]  # initial momentum (not used if optimizer = gdtuo)
+  weight_decay = 0.01  # initial weight decay (not used if optimizer = gdtuo; note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 16_384  # 4_096  # 16_384  # 65_536
   n_epochs = 0  # total training epochs: if n_epochs set to 0, n_steps will be used
@@ -38,10 +36,10 @@
 
 [models]
   [models.fasttext]
-    task = 'skipgram'
+    task = 'skipgram'  # todo: implement bow
     input_keys = ['pos_center', 'pos_context', 'neg_context']
     label_keys = []
-    n_neg_samples = 20  # 0 for using softmax over all vocab tokens
+    n_neg_samples = 15  # 0 for using softmax over all vocab tokens
     d_embed = 256
     [models.fasttext.special_tokens]
       '[PAD]' = 0

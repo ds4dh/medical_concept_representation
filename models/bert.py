@@ -42,21 +42,18 @@ class BERT(nn.Module):
         # Final projection to predict words for each masked token
         self.final_proj = nn.Linear(d_embed, vocab_sizes['total'])
 
-    def forward(self,
-                masked: torch.Tensor,
-                segment_labels: torch.Tensor=None,
-                get_embeddings: bool=False):
+    def forward(self, input_dict: dict):
         # Embed token sequences to vector sequences
-        pad_mask = self.create_pad_mask(masked)
-        x = self.embedding(masked, segment_labels)
-
+        pad_mask = self.create_pad_mask(input_dict['masked'])
+        x = self.embedding(input_dict['masked'], input_dict['segment_labels'])
+        
         # Run through all BERT layers (with intermediate residual connection)
         for attn, ff in self.layers:
             x = attn(x, mask=pad_mask) + x
             x = ff(x) + x
         
         # Return embeddings or word projections
-        return x if get_embeddings else self.final_proj(x)
+        return x if input_dict['get_embeddings'] else self.final_proj(x)
 
     def create_pad_mask(self, masked: torch.Tensor):
         # Adapt the size of the array used to build the masks

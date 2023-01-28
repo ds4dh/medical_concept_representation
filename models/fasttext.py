@@ -31,10 +31,11 @@ class FastText(nn.Module):
         nn.init.uniform_(self.center_embeddings.weight.data, -bounds, bounds)
         nn.init.constant_(self.context_embeddings.weight.data, 0)
 
-    def forward(self,
-                pos_center: torch.Tensor,
-                pos_context: torch.Tensor,
-                neg_context: torch.Tensor=None):
+    def forward(self, input_dict: dict):
+        # Assign input variables
+        pos_center = input_dict['pos_center']
+        pos_context = input_dict['pos_context']
+
         # Softmax case
         if self.n_neg_samples == 0:
             pos_center = self.center_embeddings(pos_center)
@@ -45,6 +46,7 @@ class FastText(nn.Module):
         
         # Negative sampling case
         else:
+            neg_context = input_dict['neg_context']
             pos_center = self.center_embeddings(pos_center)
             pos_context = self.context_embeddings(pos_context)
             if len(pos_center.shape) > 2:  # ngram case

@@ -12,7 +12,6 @@ class Glove(nn.Module):
                  d_embed: int,
                  *args, **kwargs):
         super().__init__()
-        assert special_tokens['[PAD]'] == 0, 'For this model, pad_id must be 0'
         pad_id = special_tokens['[PAD]']
         vocab_size = vocab_sizes['total']
         self.l_emb = nn.Embedding(vocab_size, d_embed, padding_idx=pad_id)
@@ -21,15 +20,15 @@ class Glove(nn.Module):
         self.r_bias = nn.Embedding(vocab_size, 1, padding_idx=pad_id)
         self.loss_fn = GloveLoss()
 
-    def forward(self, left: torch.Tensor, right: torch.Tensor):
+    def forward(self, input_dict: dict):
         # Compute embeddings
-        l_v = self.l_emb(left)
-        l_b = self.l_bias(left)
-        r_v = self.r_emb(right)
-        r_b = self.r_bias(right)
+        l_v = self.l_emb(input_dict['left'])
+        l_b = self.l_bias(input_dict['left'])
+        r_v = self.r_emb(input_dict['right'])
+        r_b = self.r_bias(input_dict['right'])
         
         # Mean over ngram dimension if existing
-        if len(l_v.shape) > 2:  # mean should be consistent with padding tokens
+        if len(l_v.shape) > 2:
             l_v = self.combine_ngram_embeddings(l_v, dim=-2)
             l_b = self.combine_ngram_embeddings(l_b, dim=-2)
             r_v = self.combine_ngram_embeddings(r_v, dim=-2)
@@ -44,7 +43,7 @@ class Glove(nn.Module):
         """ Combine stacked ngram embedding vectors coming from subword tokens
             or from a sequence of tokens, into a single embedding vector
         """
-        if reduce == 'mean':
+        if reduce == 'mean':  # take the mean only over non-padding tokens
             norm_factor = (x != 0).sum(dim=dim).clip(min=1) / x.shape[dim]
             return x.mean(dim=dim) / norm_factor
         else:
@@ -81,29 +80,26 @@ class Glove(nn.Module):
 class GloveLoss(nn.Module):
     """ Loss for the GloVe Model
     """
-    def __init__(self, x_max: int=100, alpha: float=3/4, reduce: str='sum'):
-        """ Hyperparameters as in the original article.
+    def __init__(self, cooc_max=500, alpha: float=0.75, reduce: str='mean'):
+        """ Hyperparameters modified from the original article (100, 0.75)
         """
         super().__init__()
-        self.m = x_max
-        self.a = alpha
-        self.reduce = reduce
-
-    def normalize(self, t: torch.Tensor):
+        self.cooc_max = cooc_max
+        self.alpha = alpha
+        assert(reduce in ('mean', 'max'), 'Invalid reduce mode')
+        self.reduce = torch.mean if reduce == 'mean' else torch.max
+        
+    def normalize(self, cooc: torch.Tensor):
         """ Normalization as in the original article.
         """
-        return torch.where(t < self.m,
-                           (t / self.m) ** self.a,
-                           torch.ones_like(t))
+        return torch.where(condition=(cooc < self.cooc_max),
+                           input=(cooc / self.cooc_max) ** self.alpha,
+                           other=1.0)
     
     def forward(self, model_output: torch.Tensor, cooc: torch.Tensor):
-        """ Expects flattened model output and target coocurence matrix.
+        """ Expects flattened model output and target coocurence matrix
         """
-        n_t = self.normalize(cooc)
-        l_t = torch.log(cooc)
-        if self.reduce == 'mean':
-            return torch.mean(n_t * (model_output - l_t) ** 2)
-        elif self.reduce == 'sum':
-            return torch.sum(n_t * (model_output - l_t) ** 2)
-        else:
-            raise ValueError('Invalid reduce mode')
+        norm_cooc = self.normalize(cooc)
+        log_cooc = torch.log(cooc)
+        return self.reduce(norm_cooc * (model_output - log_cooc) ** 2)
+        
