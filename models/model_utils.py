@@ -47,8 +47,8 @@ def load_model_and_params_from_config(config_path: str):
     model_name = '_'.join([model_used, ngram_str])
     
     # Retrieve corresponding model code
-    assert(model_used) in models.AVAILABLE_MODELS.keys(), 'Selected model ' +\
-        f'not available. Select from: {list(models.AVAILABLE_MODELS.keys())}.'
+    assert model_used in models.AVAILABLE_MODELS.keys(),\
+        'Model not found (available: %s)' % list(models.AVAILABLE_MODELS.keys())
     model = models.AVAILABLE_MODELS[model_used]
     model_params = config['models'][model_used]
     model_params['model_name'] = model_name

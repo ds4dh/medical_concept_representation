@@ -86,7 +86,7 @@ class GloveLoss(nn.Module):
         super().__init__()
         self.cooc_max = cooc_max
         self.alpha = alpha
-        assert(reduce in ('mean', 'max'), 'Invalid reduce mode')
+        assert reduce in ('mean', 'max'), 'Invalid reduce mode.'
         self.reduce = torch.mean if reduce == 'mean' else torch.max
         
     def normalize(self, cooc: torch.Tensor):
