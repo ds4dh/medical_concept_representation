@@ -1,4 +1,4 @@
-from .fasttext import FastText
+from .word2vec import FastText, Word2Vec
 from .glove import Glove
 from .elmo import ELMO
 from .transformer import Transformer
@@ -12,7 +12,8 @@ from .model_utils import (
     set_environment
 )
 
-AVAILABLE_MODELS = {'fasttext': FastText,
+AVAILABLE_MODELS = {'word2vec': Word2Vec,
+                    'fasttext': FastText,
                     'glove': Glove,
                     'elmo': ELMO,
                     'transformer': Transformer,
