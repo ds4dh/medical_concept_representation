@@ -34,7 +34,7 @@ PARAM_SETS = [
 def main():
     for param_set in PARAM_SETS:
         update_run_config_file_with_new_model(param_set)
-        # runpy.run_module('train', run_name='__main__')
+        runpy.run_module('train', run_name='__main__')
         print('-------------------------------------------------')
         print('Simulation finished for the following parameters:')
         pprint(param_set, width=1)
