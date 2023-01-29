@@ -105,6 +105,7 @@ class SubWordTokenizer():
                 ngrams suited to icd codes (forward-only ngrams))
         
         """
+        self.data_dir = data_dir
         self.encoder = dict(special_tokens)  # will be updated in fit
         self.special_tokens = dict(special_tokens)  # will stay the same
         assert ngram_min_len >= 0 and ngram_max_len >= ngram_min_len
@@ -115,9 +116,10 @@ class SubWordTokenizer():
         self.ngram_mode = ngram_mode
         self.ngram_base_prefixes = ngram_base_prefixes
         self.ngram_base_suffixes = ngram_base_suffixes
-        self.ngram_fn = self._select_ngram_fn(ngram_mode)
         self.unique_id = self.create_unique_id()
-    
+        self.ngram_fn = self._select_ngram_fn(ngram_mode)
+        self.path = os.path.join(self.data_dir, 'tokenizer', self.unique_id)
+        
     def create_unique_id(self):
         unique_str = str(vars(self))
         return hashlib.sha256(unique_str.encode()).hexdigest()

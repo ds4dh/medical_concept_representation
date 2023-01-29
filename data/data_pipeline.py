@@ -71,8 +71,9 @@ class DataPipeline():
         print(' - Loading tokenizer from %s' % tokenizer.path)
         try:
             with open(tokenizer.path, 'rb') as tokenizer_file:
-                loaded_tokenizer = pickle.load(tokenizer_file)
-                return loaded_tokenizer
+                tokenizer = pickle.load(tokenizer_file)
+                print(' - Loaded tokenizer - voc: %s'  % tokenizer.vocab_sizes)
+                return tokenizer
         except:
             print(' - Tokenizer not found, retraining it')
         
@@ -80,7 +81,7 @@ class DataPipeline():
         dp = data.JsonReader(self.data_fulldir, 'train')
         list_with_all_data = [token for sentence in dp for token in sentence]
         tokenizer.fit(list_with_all_data)
-        print(' - Trained tokenizer - vocabulary: %s' % tokenizer.vocab_sizes)
+        print(' - Trained tokenizer - voc: %s' % tokenizer.vocab_sizes)
         
         # Save the trained tokenizer and return it
         if run_params['debug']: tokenizer.path
