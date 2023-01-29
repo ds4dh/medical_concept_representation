@@ -12,21 +12,21 @@ PARAM_SETS = [
         'model_used': "'word2vec'",
         'ngram_mode': "'word'",
         'optimizer': "'gdtuo'",
-        'lr': "0.001"
+        'lr': "0.00005"
     },
     {
         'exp_id': "'test'",
         'model_used': "'fasttext'",
         'ngram_mode': "'subword'",
         'optimizer': "'gdtuo'",
-        'lr': '0.001'
+        'lr': '0.00005'
     },
     {
         'exp_id': "'test'",
         'model_used': "'glove'",
         'ngram_mode': "'word'",
         'optimizer': "'gdtuo'",
-        'lr': "0.001"
+        'lr': "0.00005"
     },
 ]
 

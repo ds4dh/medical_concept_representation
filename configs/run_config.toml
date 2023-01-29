@@ -1,5 +1,4 @@
 [run]
-  # Possible models: 'word2vec', 'fasttext', 'glove', 'elmo', 'bert', 'fnet', 'bert_classifier', 'transformer'
   exp_id = 'test'
   model_used = 'glove'
   model_version = 0  # will increase to avoid overwriting until version is unique
@@ -23,7 +22,7 @@
 [train]
   optimizer = 'gdtuo'
   scheduler = 'linear'  # 'noam', 'linear' (not used if optimizer == 'gdtuo')
-  lr = 0.0001
+  lr = 0.00005
   betas = [0.9, 0.998]  # initial momentum (not used if optimizer = 'gdtuo')
   weight_decay = 0.01  # initial weight decay (not used if optimizer = 'gdtuo'; note: [adam, radam] and adamw have different ways of applying weight decay)
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated

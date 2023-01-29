@@ -17,7 +17,7 @@ warnings.filterwarnings('ignore', category=PossibleUserWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
-DEFAULT_CONFIG_PATH = os.path.join('config', 'run_config.toml')
+DEFAULT_CONFIG_PATH = os.path.join('configs', 'run_config.toml')
 PARSER = argparse.ArgumentParser(description='Train and test model.')
 PARSER.add_argument('--config', '-c', type=str, default=DEFAULT_CONFIG_PATH)
 ARGS = PARSER.parse_args()
