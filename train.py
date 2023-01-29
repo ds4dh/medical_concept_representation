@@ -1,3 +1,4 @@
+import os
 import argparse
 import models
 import data
@@ -16,11 +17,12 @@ warnings.filterwarnings('ignore', category=PossibleUserWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
+DEFAULT_CONFIG_PATH = os.path.join('config', 'run_config.toml')
 PARSER = argparse.ArgumentParser(description='Train and test model.')
-PARSER.add_argument('--config_path', '-c', type=str, default='./config.toml')
+PARSER.add_argument('--config', '-c', type=str, default=DEFAULT_CONFIG_PATH)
 ARGS = PARSER.parse_args()
 MODEL, RUN_PARAMS, DATA_PARAMS, TRAIN_PARAMS, MODEL_PARAMS = \
-    models.load_model_and_params_from_config(ARGS.config_path)
+    models.load_model_and_params_from_config(ARGS.config)
 
 
 class PytorchLightningWrapper(pl.LightningModule):
@@ -165,7 +167,7 @@ def main():
         models.load_checkpoint(MODEL_PARAMS['model_name'], **RUN_PARAMS)
     
     # Update params if model_version changed and save config file to model logs
-    models.update_and_save_config(ARGS.config_path,
+    models.update_and_save_config(ARGS.config,
                                   RUN_PARAMS,
                                   MODEL_PARAMS['model_name'],
                                   new_model_version)

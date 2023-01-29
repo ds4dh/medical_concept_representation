@@ -7,7 +7,7 @@ from gradient_descent_the_ultimate_optimizer import gdtuo
 def select_optimizer(model, train_params):
     # Hyper-optimization
     if train_params['optimizer'] == 'gdtuo':
-        hyper_optim = gdtuo.SGD(alpha=1e-5)  # train_params['lr'])
+        hyper_optim = gdtuo.SGD(alpha=train_params['lr'])
         optim = gdtuo.Adam(optimizer=hyper_optim)
         gdtuo_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
         gdtuo_wrapper.initialize()
