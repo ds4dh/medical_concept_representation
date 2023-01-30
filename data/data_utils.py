@@ -1,5 +1,6 @@
 import json
 import torch
+import random
 from functools import partial
 from itertools import zip_longest
 from torchdata.datapipes.iter import (
@@ -32,16 +33,20 @@ class JsonReader(IterDataPipe):
     
     @staticmethod
     def filter_fn(filename, split):
-        """ Return whether a string filename contains the given split """
+        """ Return whether a string filename contains the given split
+        """
         return split in filename
 
 
 class Encoder(IterDataPipe):
-    """ Encode lists of words to lists of tokens or ngrams with a tokenizer """
-    def __init__(self, dp, tokenizer):
+    """ Encode lists of words to lists of tokens or ngrams with a tokenizer and
+        shuffle tokens inside sample sequences with some probability
+    """
+    def __init__(self, dp, tokenizer, token_shuffle_prob=0.0):
         super().__init__()
         self.dp = dp
         self.tokenizer = tokenizer
+        self.token_shuffle_prob = token_shuffle_prob
         
     def __iter__(self):
         """ Source sample format: list of strings
@@ -60,7 +65,9 @@ class Encoder(IterDataPipe):
     def encode_fn(self, sample):
         """ Tokenize a list of words using the tokenizer """
         assert isinstance(sample, list), 'Bad input type %s' % type(sample)
-        return [self.tokenizer.encode(word) for word in sample]
+        encoded = [self.tokenizer.encode(word) for word in sample]
+        if random.random() < self.token_shuffle_prob: random.shuffle(encoded)
+        return encoded 
 
 
 class Trimer(IterDataPipe):
@@ -229,4 +236,3 @@ class TorchPadder(IterDataPipe):
             be an int (e.g., 0) or a list of ints (e.g., [0, 0, ..., 0])
         """
         return list(zip(*zip_longest(*nested_list, fillvalue=pad_elem)))
-    

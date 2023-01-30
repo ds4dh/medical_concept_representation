@@ -1,7 +1,8 @@
 [run]
   exp_id = 'test'
-  model_used = 'glove'
+  model_used = 'word2vec'
   model_version = 0  # will increase to avoid overwriting until version is unique
+  token_shuffle_prob = 0.25  # shuffling may be applied inside sequence samples, with a certain probability
   ngram_mode = 'word'
   ngram_min_len = 2  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
