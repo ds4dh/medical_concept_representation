@@ -53,72 +53,8 @@ def load_model_and_params_from_config(config_path: str):
     model_params = config['models'][model_used]
     model_params['model_name'] = model_name
     
-    # Update bert classifier parameters if used
-    if model_used == 'bert_classifier':
-        update_class_info_for_bert_classifier(data_params, model_params)
-        update_params_for_bert_classifier(config, model_name, model_params)
-    
     # Send the model and all parameterss to the main script
     return model, run_params, data_params, train_params, model_params
-
-
-def update_class_info_for_bert_classifier(data_params: dict,
-                                          model_params: dict):
-    """ Update data and bert classifier parameters with class information
-        TODO: put all this (specific to task, e.g., here, reagent prediction)
-        TODO: in data/task/parsing (but hard because model loss_fn need update)
-    """
-    data_dir = os.path.join(data_params['data_dir'], data_params['data_subdir'])
-    with open(os.path.join(data_dir, 'reagent_popularity.json'), 'r') as f:
-        
-        # Reach reagent information
-        dicts = [json.loads(line) for line in f.readlines()]
-        model_params['pos_weights'] = [d['weight'] for d in dicts]
-        
-        # Case where only k most popular reagents are classified
-        if model_params['n_classes'] != 0:
-            model_params['pos_weights'] = \
-                model_params['pos_weights'][:model_params['n_classes']]
-                
-        # Case where all reagents are classified
-        else:
-            model_params['n_classes'] = len(dicts)
-            
-
-def update_params_for_bert_classifier(config: dict,
-                                      model_name: str,
-                                      model_params: dict):
-    """ Update parameters of bert classifier with parameters of bert    
-    """
-    # Try to find the corresponding BERT model ckpt for the BERT classifier
-    if model_params['load_pretrained_bert']:
-        bert_path = model_params['bert_path']
-        if bert_path not in ['', 'none']:
-            bert_dir = os.path.join(bert_path, 'checkpoints')
-            bert_config = toml.load(os.path.join(bert_path, 'config.toml'))
-            bert_params = bert_config['models']['bert']
-        else:
-            log_dir = os.path.join('logs', config['run_params']['exp_dir'])
-            version = 'version_%s' % config['run']['model_version']
-            bert_dir = os.path.join(log_dir, model_name, version, 'checkpoints')
-            bert_dir = bert_dir.replace('bert_classifier', 'bert')
-            bert_params = config['models']['bert']
-        try:
-            bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
-            model_params['bert_ckpt_path'] = bert_ckpt_path
-        except FileNotFoundError:
-            raise FileNotFoundError('No checkpoint found to initialize BERT ' +\
-                'model at %s. Note: BERT and BERT classifier ' % bert_dir +\
-                'ids, versions and ngram-lengths must match.')
-    else:
-        model_params['bert_ckpt_path'] = None
-        bert_params = config['models']['bert']
-    
-    # Update BERT classifier hyper-parameters with BERT hyper-parameters
-    bert_params = config['models']['bert']
-    for k, v in bert_params.items():
-        if k not in model_params.keys():
-            model_params[k] = v
 
 
 def load_checkpoint(model_name: str,
@@ -213,10 +149,10 @@ def update_and_save_config(config_path: str,
                 new_config_file.write(line)
 
 
-def set_environment(num_workers: int):
+def set_environment(run_params: int):
     """ Update environment if needed and check how many gpu can be used 
     """
-    if num_workers > 0:
+    if run_params['num_workers'] > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
     if torch.cuda.is_available():
         accelerator = 'gpu'
@@ -225,3 +161,65 @@ def set_environment(num_workers: int):
         accelerator = 'cpu'
         devices = 'auto'
     return accelerator, devices
+
+
+# def update_class_info_for_bert_classifier(data_params: dict,
+#                                           model_params: dict):
+#     """ Update data and bert classifier parameters with class information
+#         Usage in load_model_and_params_from_config, just before return
+#         if model_used == 'bert_classifier':
+#             update_class_info_for_bert_classifier(data_params, model_params)
+#             update_params_for_bert_classifier(config, model_name, model_params)
+    
+#     """
+#     data_dir = os.path.join(data_params['data_dir'], data_params['data_subdir'])
+#     with open(os.path.join(data_dir, 'reagent_popularity.json'), 'r') as f:
+        
+#         # Reach reagent information
+#         dicts = [json.loads(line) for line in f.readlines()]
+#         model_params['pos_weights'] = [d['weight'] for d in dicts]
+        
+#         # Case where only k most popular reagents are classified
+#         if model_params['n_classes'] != 0:
+#             model_params['pos_weights'] = \
+#                 model_params['pos_weights'][:model_params['n_classes']]
+                
+#         # Case where all reagents are classified
+#         else:
+#             model_params['n_classes'] = len(dicts)
+            
+
+# def update_params_for_bert_classifier(config: dict,
+#                                       model_name: str,
+#                                       model_params: dict):
+#     """ Update parameters of bert classifier with parameters of bert    
+#     """
+#     # Try to find the corresponding BERT model ckpt for the BERT classifier
+#     if model_params['load_pretrained_bert']:
+#         bert_path = model_params['bert_path']
+#         if bert_path not in ['', 'none']:
+#             bert_dir = os.path.join(bert_path, 'checkpoints')
+#             bert_config = toml.load(os.path.join(bert_path, 'config.toml'))
+#             bert_params = bert_config['models']['bert']
+#         else:
+#             log_dir = os.path.join('logs', config['run_params']['exp_dir'])
+#             version = 'version_%s' % config['run']['model_version']
+#             bert_dir = os.path.join(log_dir, model_name, version, 'checkpoints')
+#             bert_dir = bert_dir.replace('bert_classifier', 'bert')
+#             bert_params = config['models']['bert']
+#         try:
+#             bert_ckpt_path = os.path.join(bert_dir, os.listdir(bert_dir)[-1])
+#             model_params['bert_ckpt_path'] = bert_ckpt_path
+#         except FileNotFoundError:
+#             raise FileNotFoundError('No checkpoint found to initialize BERT ' +\
+#                 'model at %s. Note: BERT and BERT classifier ' % bert_dir +\
+#                 'ids, versions and ngram-lengths must match.')
+#     else:
+#         model_params['bert_ckpt_path'] = None
+#         bert_params = config['models']['bert']
+    
+#     # Update BERT classifier hyper-parameters with BERT hyper-parameters
+#     bert_params = config['models']['bert']
+#     for k, v in bert_params.items():
+#         if k not in model_params.keys():
+#             model_params[k] = v

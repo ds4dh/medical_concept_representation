@@ -6,11 +6,6 @@ import metrics
 import train_utils
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from pytorch_lightning.callbacks import (
-    LearningRateMonitor,
-    ModelCheckpoint,
-    EarlyStopping,
-)
 from pytorch_lightning.utilities.warnings import PossibleUserWarning
 import warnings
 warnings.filterwarnings('ignore', category=PossibleUserWarning)
@@ -176,19 +171,10 @@ def main():
                                   MODEL_PARAMS['model_name'],
                                   new_model_version)
     
-    # Load pytorch lightning model-data wrapper
+    # Load PL model-data wrapper, set environment, callbacks and logger
     model_data_wrapper = PytorchLightningWrapper()
-    
-    # Set environment
-    accelerator, devices = models.set_environment(RUN_PARAMS['num_workers'])
-    
-    # Callbacks for logging and checkpointing
-    callbacks = [ModelCheckpoint(every_n_train_steps=100),
-                 EarlyStopping(monitor='val_loss', patience=4)]
-    if TRAIN_PARAMS['optimizer'] != 'gdtuo':
-        callbacks.extend([LearningRateMonitor(logging_interval='step')])
-        
-    # Set a logger to monitor progress on tensorboard
+    accelerator, devices = models.set_environment(RUN_PARAMS)
+    callbacks = train_utils.select_callbacks(TRAIN_PARAMS)
     logger = pl.loggers.TensorBoardLogger(save_dir=log_dir,
                                           name=MODEL_PARAMS['model_name'],
                                           version=new_model_version)

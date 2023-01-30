@@ -2,6 +2,11 @@ import warnings
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
 from gradient_descent_the_ultimate_optimizer import gdtuo
+from pytorch_lightning.callbacks import (
+    LearningRateMonitor,
+    ModelCheckpoint,
+    EarlyStopping,
+)
 
 
 def select_optimizer(model, train_params):
@@ -41,6 +46,17 @@ def select_scheduler(optimizer, train_params):
     else:
         raise ValueError('Invalid scheduler given to the pipeline.')
     return sched_fn(**sched_params)
+
+
+def select_callbacks(train_params):
+    callbacks = [ModelCheckpoint(every_n_train_steps=100)]
+    if train_params['early_stopping_patience'] > 0:
+        callbacks.append(EarlyStopping(
+            monitor='val_loss',
+            patience=train_params['early_stopping_patience']))
+    if train_params['optimizer'] != 'gdtuo':
+        callbacks.extend([LearningRateMonitor(logging_interval='step')])
+    return callbacks
 
 
 class NoamSchedulerWithWarmup(_LRScheduler):
