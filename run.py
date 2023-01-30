@@ -3,8 +3,8 @@ import argparse
 import models
 import data
 import metrics
-import pytorch_lightning as pl
 import train_utils
+import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
@@ -19,8 +19,10 @@ warnings.filterwarnings('ignore', category=UserWarning)
 
 DEFAULT_CONFIG_PATH = os.path.join('configs', 'run_config.toml')
 PARSER = argparse.ArgumentParser(description='Train and test model.')
-PARSER.add_argument('--config', '-c', type=str, default=DEFAULT_CONFIG_PATH)
+PARSER.add_argument('-c', '--config', type=str, default=DEFAULT_CONFIG_PATH)
+PARSER.add_argument('-t', '--test_only', action='store_true')
 ARGS = PARSER.parse_args()
+DO_TEST_ONLY = ARGS.test_only
 MODEL, RUN_PARAMS, DATA_PARAMS, TRAIN_PARAMS, MODEL_PARAMS = \
     models.load_model_and_params_from_config(ARGS.config)
 
@@ -123,12 +125,12 @@ class PytorchLightningWrapper(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """ Perform a testing step with the trained model
         """
-        return self.step(batch, batch_idx, 'test')
+        if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
         print('Evaluating trained model')
-        metrics.visualization_task_ehr(self.pipeline.tokenizer,
-                                       self.model,
+        metrics.visualization_task_ehr(self.model,
+                                       self.pipeline.tokenizer,
                                        self.logger)
         # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
         # metrics.prediction_task_ehr(self.model, test_data_dir)
@@ -163,8 +165,10 @@ def main():
         data, and train the model to perform a model-specific task
     """
     # Load checkpoint path if needed (set to None if no checkpoint)
+    if DO_TEST_ONLY: RUN_PARAMS['load_model'] = True
     ckpt_path, log_dir, new_model_version = \
-        models.load_checkpoint(MODEL_PARAMS['model_name'], **RUN_PARAMS)
+        models.load_checkpoint(MODEL_PARAMS['model_name'],
+                               **RUN_PARAMS)
     
     # Update params if model_version changed and save config file to model logs
     models.update_and_save_config(ARGS.config,
@@ -205,8 +209,11 @@ def main():
                          callbacks=callbacks,
                          logger=logger)
     
-    # Train, then test model
-    trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
+    # Train (if wanted), then test model
+    if not DO_TEST_ONLY:
+        trainer.fit(model_data_wrapper, ckpt_path=ckpt_path)
+    else:
+        print('Skipping training, since test_only mode is enabled')
     trainer.test(model_data_wrapper, ckpt_path=ckpt_path)  # 'last')
 
 

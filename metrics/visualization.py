@@ -1,73 +1,137 @@
-import pandas as pd
-import torch 
-import matplotlib.pyplot as plt
+import torch
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+import tempfile
+import data
+import pytorch_lightning as pl
+from PIL import Image
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
-def compute_reduced_representation(embeddings, algorithm='tsne', n_dims=3):
-    if algorithm == 'pca':
-        return PCA().fit_transform(embeddings)[:, :n_dims]
-    elif algorithm == 'tsne':
-        params = {'learning_rate': 'auto', 'init': 'pca'}
-        return TSNE(n_dims, **params).fit_transform(embeddings)
-    else:
-        raise ValueError('Invalid algorithm name (pca, tsne).')
+CATEGORY_SUBLEVELS = {
+    'DIA_': ['S', 'T', 'O', 'P', 'F', 'J', 'K', 'I', 'N'],
+    'PRO_': ['00', '02', '04', '0B', '0D', '0F', '0H', '0S', '0T', '0U'],
+    'MED_': ['C', 'J', 'L', 'N', 'R', 'S']
+}
+DIMENSIONALITY_REDUCTION_ALGORITHM = 'tsne'  # 'pca', 'tsne'
+assert DIMENSIONALITY_REDUCTION_ALGORITHM in ('pca', 'tsne'),\
+    'Invalid algorithm for dimensionality reduction [pca, tsne]'
+REDUCED_DIMENSIONALITY = 2  # 2, 3
+assert REDUCED_DIMENSIONALITY in [2, 3], 'Invalid reduced dimensionality [2, 3]'
+FIG_SIZE = (14, 8)
+BASE_TEXT_SIZE = 8
+MARKER_SIZE = BASE_TEXT_SIZE * 2
+ALL_COLORS = (list(plt.cm.tab10(np.arange(10))) + ["crimson", "indigo"]) * 10
+LEGEND_PARAMS = {
+    'loc': 'upper center',
+    'bbox_to_anchor': (0.5, -0.05),
+    'fancybox': True,
+    'shadow': True,
+    'fontsize': BASE_TEXT_SIZE
+}
+SCATTER_PARAMS =  {
+    'marker': 'o',
+    's': MARKER_SIZE,
+    'linewidths': 0.5,
+    'edgecolors': 'k'
+}
 
 
-def log_visualization(reduced, dfc, labels_list, cat, logger):
-    fig = plt.figure()
-    for i in labels_list:
-        to_visualize = reduced.reshape(2, -1)[:, dfc['label'] == i]
-        plt.scatter(*to_visualize, s=4)
-    plt.legend(labels_list,
-               bbox_to_anchor=(1.05, 1.0),
-               loc='upper left',
-               borderaxespad=0.0)
-    plt.xticks([])
-    plt.yticks([])
-    plt.xlabel(cat)
-    fig.canvas.draw()
-    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    data = torch.from_numpy(data).permute(2, 0, 1)
-    logger.experiment.add_image('test', data)
+def visualization_task_ehr(model: torch.nn.Module,
+                           tokenizer: data.tokenizers.Tokenizer,
+                           logger: pl.loggers.tensorboard.TensorBoardLogger
+                           ) -> None:
+    """ Reduce the dimensionality of concept embeddings for different categories
+        and log a scatter plot of the low-dimensional data to tensorboard
+    """
+    fig = plt.figure(figsize=FIG_SIZE)
+    for subplot_idx, category in enumerate(CATEGORY_SUBLEVELS.keys()):
+        token_info = get_token_info(model, tokenizer, category)
+        reduced = compute_reduced_representation(token_info['embedded'])
+        plot_reduced_data(reduced, fig, token_info, category, subplot_idx)
+    log_figure_to_tensorboard(fig, logger)
 
 
-def get_most_populous_labels(words: list, number_of_chars: int=2): 
-    arr = pd.Series([w.split('_')[1][:number_of_chars] for w in words])
-    return arr.value_counts().index.to_list()[:10]
-
-
-def get_categories_per_token(vocabulary):
-    all_rows = []
-    for w in vocabulary:
-        for cat in ['MED','DIA', 'LAB', 'LOC', 'DEM' , 'PRO']:
-            if (w != '%s_' % cat  # filter out category tokens 'MED_' 'DIA_' etc
-            and w.split('_')[0] == cat): # exclude words that don't start with 'UNK' 'PAD' 'P' O X  MED_XX DIA_XX etc
-                all_rows.append({'category': w.split('_')[0],
-                                 'word': w})
-    return pd.DataFrame.from_records(all_rows).reset_index(drop=True)
-
-
-def visualization_task_ehr(tokenizer, model, logger):
-    vocabulary = tokenizer.get_vocab()
-    df = get_categories_per_token(vocabulary)
+def plot_reduced_data(reduced_data: np.ndarray,
+                      fig: matplotlib.figure.Figure,
+                      token_info: dict,
+                      category: str,
+                      subplot_idx: int
+                      ) -> None:
+    """ Plot data of reduced dimensionality to a 2d or 3d scatter plot
+    """
+    # Prepare subfigure and title
+    data_dim = reduced_data.shape[-1]
+    plot_title = '%s embeddings\n%sd projection (%s)' %\
+        (category.split('_')[0], data_dim, DIMENSIONALITY_REDUCTION_ALGORITHM)
+    kwargs = {} if data_dim <= 2 else {'projection': '3d'}
+    ax = fig.add_subplot(1, 3, subplot_idx + 1, **kwargs)
+    ax.set_title(plot_title, fontsize=BASE_TEXT_SIZE * 2)
     
-    for cat in ['MED','DIA', 'LAB']:
-        print(' - Visualizing %s data embeddings' % cat)
-        dfc = df[df['category'] == cat].copy()
-        words = dfc['word']
-        labels_list = get_most_populous_labels(words)
-        dfc['label'] = dfc['word'].apply(lambda x: x.split('_')[1][:2]
-                                         if (x.split('_')[1][:2] in labels_list) 
-                                         else 'OTHER')
+    # Plot data of reduced dimensionality
+    unique_labels = list(set(token_info['labels']))
+    unique_colors = ALL_COLORS[:len(unique_labels)]
+    label_array = np.array(token_info['labels'])
+    for label, color in zip(unique_labels, unique_colors):
+        sub_category_indices = np.where(label_array == label)
+        data = reduced_data[sub_category_indices]
+        data = [data[:, i] for i in range(data.shape[-1])]
+        ax.scatter(*data, **SCATTER_PARAMS, color=color, label=label)
         
-        labels_list = labels_list + ['OTHER']
-        tokens = words.apply(lambda x: tokenizer.encode(x))
-        embeddings = model.get_token_embeddings(tokens)
+    # Add token indices as text annotation for every data point
+    for word, coord in zip(token_info['tokens'], reduced_data):
+        if np.random.rand() < 0.1:
+            coord = [c + 0.05 for c in coord]
+            ax.text(*coord, word, fontsize=BASE_TEXT_SIZE // 2)
+            
+    # Polish figure
+    ax.margins(x=0.0, y=0.0)
+    ax.legend(**LEGEND_PARAMS, ncol=len(unique_labels) // 2)
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    if data_dim > 2: ax.set_zticklabels([])
+    
+def log_figure_to_tensorboard(fig: matplotlib.figure.Figure,
+                              logger: pl.loggers.tensorboard.TensorBoardLogger
+                              ) -> None:
+    """ Log the visualization plot to tensorboard as an image stream
+    """
+    temp_file_name = tempfile.NamedTemporaryFile(suffix='.png').name
+    fig.savefig(temp_file_name, dpi=300, bbox_inches='tight')  
+    image = np.asarray(Image.open(temp_file_name)).transpose(2, 0, 1)
+    logger.experiment.add_image('visualization', image)
+    
+
+def compute_reduced_representation(embeddings: torch.Tensor) -> np.ndarray:
+    """ Reduce the dimensionality of high-dimensional concept embeddings
+    """
+    if DIMENSIONALITY_REDUCTION_ALGORITHM == 'pca':
+        return PCA().fit_transform(embeddings)[:, :REDUCED_DIMENSIONALITY]
+    elif DIMENSIONALITY_REDUCTION_ALGORITHM == 'tsne':
+        params = {'learning_rate': 'auto', 'init': 'pca'}
+        return TSNE(REDUCED_DIMENSIONALITY, **params).fit_transform(embeddings)
+    
+
+def get_token_info(model: torch.nn.Module,
+                   tokenizer: data.tokenizers.Tokenizer,
+                   category: str
+                   ) -> dict[str, list[str]]:
+    """ For each token, compute its embedding vector and its class labels
+    """
+    vocab = tokenizer.get_vocab()
+    cat_tokens = [t for t in vocab if category in t and category != t]
+    token_label_pairs = [select_plotted_token(t, category) for t in cat_tokens]
+    tokens, labels = zip(*[p for p in token_label_pairs if p is not None])
+    encoded = [tokenizer.encode(token) for token in tokens]
+    embeddings = model.get_token_embeddings(encoded)
+    return {'tokens': tokens, 'embedded': embeddings, 'labels': labels}
+
+
+def select_plotted_token(token: str, cat: str) -> tuple[str, str]:
+    to_check = token.split(cat)[-1]
+    for s in CATEGORY_SUBLEVELS[cat]:
+        if to_check.startswith(s):
+            return (token, s)
         
-        # Reduce dimensionality
-        reduced = compute_reduced_representation(embeddings, n_dims=2)
-        log_visualization(reduced, dfc, labels_list, cat, logger)
