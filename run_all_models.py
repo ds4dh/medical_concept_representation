@@ -1,4 +1,5 @@
 import os
+import sys
 import runpy
 from pprint import pprint
 
@@ -9,29 +10,33 @@ RUN_CONFIG_PATH = os.path.join(CONFIG_DIR, 'run_config.toml')
 PARAM_SETS = [
     {
         'exp_id': "'test'",
+        'model_used': "'glove'",
+        'ngram_mode': "'word'",
+        'optimizer': "'hyper-1'",
+        'lr': '0.001',
+        'hyper_lr': '0.0001',
+    },
+    {
+        'exp_id': "'test'",
         'model_used': "'word2vec'",
         'ngram_mode': "'word'",
-        'optimizer': "'gdtuo'",
-        'lr': "0.00005"
+        'optimizer': "'hyper-1'",
+        'lr': '0.001',
+        'hyper_lr': '0.0001',
     },
     {
         'exp_id': "'test'",
         'model_used': "'fasttext'",
         'ngram_mode': "'subword'",
-        'optimizer': "'gdtuo'",
-        'lr': '0.00005'
-    },
-    {
-        'exp_id': "'test'",
-        'model_used': "'glove'",
-        'ngram_mode': "'word'",
-        'optimizer': "'gdtuo'",
-        'lr': "0.00005"
-    },
+        'optimizer': "'hyper-1'",
+        'lr': '0.001',
+        'hyper_lr': '0.0001',
+    }
 ]
 
 
 def main():
+    sys.argv.append('-c%s' % RUN_CONFIG_PATH)  # no space, for some reason
     for param_set in PARAM_SETS:
         update_run_config_file_with_new_model(param_set)
         runpy.run_module('run', run_name='__main__')

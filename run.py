@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore', category=PossibleUserWarning)
 warnings.filterwarnings('ignore', category=UserWarning)
 
 
-DEFAULT_CONFIG_PATH = os.path.join('configs', 'run_config.toml')
+DEFAULT_CONFIG_PATH = os.path.join('configs', 'base_config.toml')
 PARSER = argparse.ArgumentParser(description='Train and test model.')
 PARSER.add_argument('-c', '--config', type=str, default=DEFAULT_CONFIG_PATH)
 PARSER.add_argument('-t', '--test_only', action='store_true')
@@ -40,7 +40,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.model = MODEL(**MODEL_PARAMS)
         
         # Some useful parameters for the run
-        self.automatic_optimization = (TRAIN_PARAMS['optimizer'] != 'gdtuo')
+        self.automatic_optimization = ('hyper' not in TRAIN_PARAMS['optimizer'])
         self.input_keys = set(MODEL_PARAMS['input_keys'])
         self.label_keys = set(MODEL_PARAMS['label_keys'])
     
@@ -48,8 +48,8 @@ class PytorchLightningWrapper(pl.LightningModule):
         """ Return the optimizer and the scheduler
         """
         optim = train_utils.select_optimizer(self.model, TRAIN_PARAMS)
-        if TRAIN_PARAMS['optimizer'] == 'gdtuo':
-            self.gdtuo_wrapper, dummy_optimizer = optim
+        if 'hyper' in TRAIN_PARAMS['optimizer']:
+            self.hyper_optim_wrapper, dummy_optimizer = optim
             return [dummy_optimizer]  # for automatisms to be performed
         sched = train_utils.select_scheduler(optim, TRAIN_PARAMS)
         sched_dict = {'scheduler': sched, 'interval': 'step', 'frequency': 1}
@@ -69,10 +69,10 @@ class PytorchLightningWrapper(pl.LightningModule):
         
         # Log loss and return it to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)
-        self.log('%s_loss' % mode, loss.cpu().detach(), batch_size=btch_sz)
+        self.log('loss/%s' % mode, loss.cpu().detach(), batch_size=btch_sz)
         return {'loss': loss}
     
-    def gdtuo_step(self, batch, batch_idx):
+    def hyper_optim_step(self, batch, batch_idx):
         """ Proceed hyper-optimization training step with gdtu-optimizer
         """
         # Retrieve inputs and labels
@@ -80,30 +80,30 @@ class PytorchLightningWrapper(pl.LightningModule):
         labels = {k: batch[k] for k in batch.keys() & self.label_keys}
         
         # Initialize model wrapper and compute model loss
-        self.gdtuo_wrapper.begin()
-        outputs = self.gdtuo_wrapper.forward(inputs)  # input_dict
+        self.hyper_optim_wrapper.begin()
+        outputs = self.hyper_optim_wrapper.forward(inputs)  # input_dict
         loss = self.model.loss_fn(outputs, **labels)
         
-        # Perform hyper-optimization with gdtuo
-        self.gdtuo_wrapper.zero_grad()
+        # Perform hyper-optimization with gdtuo python package
+        self.hyper_optim_wrapper.zero_grad()
         self.manual_backward(loss, create_graph=True)
-        self.gdtuo_wrapper.step()
+        self.hyper_optim_wrapper.step()
         
         # Dummy optimization step to update some pytorch lightning variables
         self.optimizer_step(self.current_epoch, batch_idx, self.optimizers())
         
         # Log loss and return it to the pl-module
         btch_sz = inputs[list(inputs.keys())[0]].size(0)
-        for k, v in self.gdtuo_wrapper.optimizer.parameters.items():
-            self.log('gdtuo-%s' % k, v)
-        self.log('train_loss', loss.cpu().detach(), batch_size=btch_sz)
+        for k, v in self.hyper_optim_wrapper.optimizer.parameters.items():
+            self.log('hyper/%s' % k, v)
+        self.log('loss/train', loss.cpu().detach(), batch_size=btch_sz)
         return {'loss': loss}
 
     def training_step(self, batch, batch_idx):
         """ Perform training step and return loss (see step)
         """
-        if TRAIN_PARAMS['optimizer'] == 'gdtuo':
-            return self.gdtuo_step(batch, batch_idx)
+        if 'hyper' in TRAIN_PARAMS['optimizer']:
+            return self.hyper_optim_step(batch, batch_idx)
         else:
             return self.step(batch, batch_idx, 'train')
 
@@ -123,7 +123,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        print('Evaluating trained model')
+        print('\nEvaluating trained model')
         metrics.visualization_task_ehr(self.model,
                                        self.pipeline.tokenizer,
                                        self.logger)

@@ -10,14 +10,23 @@ from pytorch_lightning.callbacks import (
 
 
 def select_optimizer(model, train_params):
-    # Hyper-optimization
-    if train_params['optimizer'] == 'gdtuo':
-        hyper_optim = gdtuo.SGD(alpha=train_params['lr'])
-        optim = gdtuo.Adam(optimizer=hyper_optim)
-        gdtuo_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
-        gdtuo_wrapper.initialize()
+    # Hyper-(hyper-)optimization with gdtuo python package
+    if 'hyper' in train_params['optimizer']:
+        # Select hyper optimization given tower level (e.g., 2 for 'hyper-2')
+        hyper_optim = gdtuo.NoOpOptimizer()
+        hyper_level = int(train_params['optimizer'].split('hyper-')[-1])
+        hyper_lr = train_params['hyper_lr'] / (10 ** hyper_level)
+        for _ in range(hyper_level):
+            hyper_lr *= 10
+            hyper_optim = gdtuo.AdamBaydin(alpha=hyper_lr,
+                                           optimizer=hyper_optim)
+        
+        # Build model optimizer wrapped into hyper-optimization pipeline
+        optim = gdtuo.Adam(alpha=train_params['lr'], optimizer=hyper_optim)
+        hyper_optim_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
+        hyper_optim_wrapper.initialize()
         dummy_optim = torch.optim.Adam([torch.empty(0)])
-        return gdtuo_wrapper, dummy_optim
+        return hyper_optim_wrapper, dummy_optim
 
     # Classic optimization
     optim_params = {'params': model.parameters(),
@@ -52,9 +61,9 @@ def select_callbacks(train_params):
     callbacks = [ModelCheckpoint(every_n_train_steps=100)]
     if train_params['early_stopping_patience'] > 0:
         callbacks.append(EarlyStopping(
-            monitor='val_loss',
+            monitor='loss/val',
             patience=train_params['early_stopping_patience']))
-    if train_params['optimizer'] != 'gdtuo':
+    if train_params['optimizer'] != 'hyper':
         callbacks.extend([LearningRateMonitor(logging_interval='step')])
     return callbacks
 
