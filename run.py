@@ -112,10 +112,14 @@ class PytorchLightningWrapper(pl.LightningModule):
         """
         return self.step(batch, batch_idx, 'val')
         
-    def validation_epoch_end(self, outputs):
+    def validation_epoch_end(self, output):
         """ Log metrics from the output of the last validation step
         """
-        pass  # TODO: see if we implement anything here
+        print('\nVisualizing trained model (during training)')
+        metrics.visualization_task_ehr(self.model,
+                                       self.pipeline.tokenizer,
+                                       self.logger,
+                                       self.global_step)
     
     def test_step(self, batch, batch_idx):
         """ Perform a testing step with the trained model
@@ -123,12 +127,11 @@ class PytorchLightningWrapper(pl.LightningModule):
         if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        print('\nEvaluating trained model')
+        print('\nVisualizing trained model (final representation)')
         metrics.visualization_task_ehr(self.model,
                                        self.pipeline.tokenizer,
-                                       self.logger)
-        # metrics.clustering_task_ehr(self.model, self.pipeline.tokenizer)
-        # metrics.prediction_task_ehr(self.model, test_data_dir)
+                                       self.logger,
+                                       self.global_step)
 
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader

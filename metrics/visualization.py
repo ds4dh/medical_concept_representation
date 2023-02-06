@@ -41,7 +41,8 @@ SCATTER_PARAMS =  {
 
 def visualization_task_ehr(model: torch.nn.Module,
                            tokenizer: data.tokenizers.Tokenizer,
-                           logger: pl.loggers.tensorboard.TensorBoardLogger
+                           logger: pl.loggers.tensorboard.TensorBoardLogger,
+                           global_step: int
                            ) -> None:
     """ Reduce the dimensionality of concept embeddings for different categories
         and log a scatter plot of the low-dimensional data to tensorboard
@@ -51,7 +52,7 @@ def visualization_task_ehr(model: torch.nn.Module,
         token_info = get_token_info(model, tokenizer, category)
         reduced = compute_reduced_representation(token_info['embedded'])
         plot_reduced_data(reduced, fig, token_info, category, subplot_idx)
-    log_figure_to_tensorboard(fig, logger)
+    log_figure_to_tensorboard(fig, logger, global_step)
 
 
 def plot_reduced_data(reduced_data: np.ndarray,
@@ -94,14 +95,15 @@ def plot_reduced_data(reduced_data: np.ndarray,
     if data_dim > 2: ax.set_zticklabels([])
     
 def log_figure_to_tensorboard(fig: matplotlib.figure.Figure,
-                              logger: pl.loggers.tensorboard.TensorBoardLogger
+                              logger: pl.loggers.tensorboard.TensorBoardLogger,
+                              global_step: int
                               ) -> None:
     """ Log the visualization plot to tensorboard as an image stream
     """
     temp_file_name = tempfile.NamedTemporaryFile(suffix='.png').name
-    fig.savefig(temp_file_name, dpi=300, bbox_inches='tight')  
+    fig.savefig(temp_file_name, dpi=150, bbox_inches='tight')  
     image = np.asarray(Image.open(temp_file_name)).transpose(2, 0, 1)
-    logger.experiment.add_image('visualization', image)
+    logger.experiment.add_image('visualization', image, global_step=global_step)
     
 
 def compute_reduced_representation(embeddings: torch.Tensor) -> np.ndarray:
