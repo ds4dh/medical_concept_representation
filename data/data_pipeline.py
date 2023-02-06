@@ -44,9 +44,8 @@ class DataPipeline():
         
         # Build task-specific pipeline
         dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.Encoder(dp,
-                          self.tokenizer,
-                          self.run_params['token_shuffle_prob'])
+        dp = data.Encoder(dp, self.tokenizer)
+        dp = data.TokenShuffler(dp, self.run_params['token_shuffle_prob'])
         dp = self.select_task_pipeline(dp, task, split)
         dp = data.CustomBatcher(dp, self.max_tokens, self.max_seq_len, shuffle)
         dp = data.TorchPadder(dp, self.tokenizer)

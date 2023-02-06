@@ -39,14 +39,12 @@ class JsonReader(IterDataPipe):
 
 
 class Encoder(IterDataPipe):
-    """ Encode lists of words to lists of tokens or ngrams with a tokenizer and
-        shuffle tokens inside sample sequences with some probability
+    """ Encode lists of words to lists of tokens or ngrams with a tokenizer 
     """
-    def __init__(self, dp, tokenizer, token_shuffle_prob=0.0):
+    def __init__(self, dp, tokenizer):
         super().__init__()
         self.dp = dp
         self.tokenizer = tokenizer
-        self.token_shuffle_prob = token_shuffle_prob
         
     def __iter__(self):
         """ Source sample format: list of strings
@@ -63,11 +61,33 @@ class Encoder(IterDataPipe):
                 yield self.encode_fn(sample)
     
     def encode_fn(self, sample):
-        """ Tokenize a list of words using the tokenizer """
+        """ Tokenize a list of words using the tokenizer
+        """
         assert isinstance(sample, list), 'Bad input type %s' % type(sample)
-        encoded = [self.tokenizer.encode(word) for word in sample]
-        if random.random() < self.token_shuffle_prob: random.shuffle(encoded)
-        return encoded 
+        return [self.tokenizer.encode(word) for word in sample]
+        
+
+class TokenShuffler(IterDataPipe):
+    """ Shuffle tokens inside sample sequences with some probability
+    """
+    def __init__(self, dp, token_shuffle_prob=0.0):
+        super().__init__()
+        self.dp = dp
+        self.token_shuffle_prob = token_shuffle_prob
+    
+    def __iter__(self):
+        for sample in self.dp:
+            if isinstance(sample, dict):
+                yield {k: sample[k] if 'label' in k  # avoid shuffling labels
+                       else self.shuffle_fn(sample[k]) for k in sample.keys()}
+            else:
+                yield self.shuffle_fn(sample)
+    
+    def shuffle_fn(self, sample):
+        """ Shuffle a list of tokens with some probability
+        """
+        if random.random() < self.token_shuffle_prob: random.shuffle(sample)
+        return sample
 
 
 class Trimer(IterDataPipe):
@@ -148,7 +168,8 @@ class CustomBatcher(IterDataPipe):
     
     @staticmethod
     def compute_len(sample):
-        """ Length metric that depends on input type """
+        """ Length metric that depends on input type
+        """
         if isinstance(sample, str):
             return sample.count(' ') + 1  # e.g., 'i am alban'
         elif isinstance(sample, list):
