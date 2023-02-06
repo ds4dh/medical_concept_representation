@@ -80,14 +80,14 @@ class Glove(nn.Module):
 class GloveLoss(nn.Module):
     """ Loss for the GloVe Model
     """
-    def __init__(self, cooc_max=500, alpha: float=0.75, reduce: str='mean'):
-        """ Hyperparameters modified from the original article (100, 0.75)
+    def __init__(self, cooc_max=100, alpha: float=0.75, reduce: str='sum'):
+        """ Hyperparameters of the original article: (100, 0.75, 'sum')
         """
         super().__init__()
         self.cooc_max = cooc_max
         self.alpha = alpha
-        assert reduce in ('mean', 'max'), 'Invalid reduce mode.'
-        self.reduce = torch.mean if reduce == 'mean' else torch.max
+        assert reduce in ('mean', 'sum'), 'Invalid reduce mode.'
+        self.reduce = torch.mean if reduce == 'mean' else torch.sum
         
     def normalize(self, cooc: torch.Tensor):
         """ Normalization as in the original article.
@@ -101,5 +101,6 @@ class GloveLoss(nn.Module):
         """
         norm_cooc = self.normalize(cooc)
         log_cooc = torch.log(cooc)
-        return self.reduce(norm_cooc * (model_output - log_cooc) ** 2)
+        unweighted_loss = torch.pow(model_output - log_cooc, 2)
+        return self.reduce(norm_cooc * unweighted_loss)
         

@@ -39,7 +39,8 @@ class CoocMaker(IterDataPipe):
     
     @staticmethod
     def create_cooc(document):
-        """ Compute co-occurrences between tokens in document sentences """
+        """ Compute co-occurrences between tokens in document sentences
+        """
         # Initialize cooccurrence matrix using document vocabulary
         print(' - Initializing co-occurrence matrix')
         if isinstance(document[0][0], list):  # for ngram encoding
@@ -59,7 +60,8 @@ class CoocMaker(IterDataPipe):
 
     @staticmethod
     def filter_cooc(cooc_, min_cooc=10):
-        """ Filters out token co-occurences that are below a threshold """
+        """ Filters out token co-occurences that are below a threshold
+        """
         assert min_cooc > 0, 'Tokens must co-occur at least once because \
                               GloVe is a log-regression model.'
         
@@ -73,8 +75,9 @@ class CoocMaker(IterDataPipe):
     
     @staticmethod
     def format_cooc(cooc, tokenizer):
-        """ Format co-occurrence dict to left/right inputs and cooc target """
-        # Take care of the case where token encoding uses ngrams
+        """ Format co-occurrence dict to left/right inputs and cooc target
+        """
+        # Take care of the case where token encoding uses ngrams (very edgy)
         ngram_map = {}
         for token in cooc.keys():
             ngram_map[token] = tokenizer.encode(tokenizer.decode(token))
