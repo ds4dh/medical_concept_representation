@@ -80,9 +80,9 @@ def plot_reduced_data(reduced_data: np.ndarray,
         data = [data[:, i] for i in range(data.shape[-1])]
         ax.scatter(*data, **SCATTER_PARAMS, color=color, label=label)
         
-    # Add token indices as text annotation for every data point
+    # Add token indices as text annotation a few data point
     for word, coord in zip(token_info['tokens'], reduced_data):
-        if np.random.rand() < 0.1:
+        if np.random.rand() < 0.01:
             coord = [c + 0.05 for c in coord]
             ax.text(*coord, word, fontsize=BASE_TEXT_SIZE // 2)
             
