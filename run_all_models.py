@@ -13,24 +13,25 @@ PARAM_SETS = [
         'model_used': "'glove'",
         'ngram_mode': "'word'",
         'optimizer': "'hyper-1'",
-        'lr': '0.001',
-        'hyper_lr': '0.0001',
+        'lr': '0.0001',
+        'hyper_lr': '0.00001',
+        # 'glove.d_embed': '200',
     },
     {
         'exp_id': "'test'",
         'model_used': "'word2vec'",
         'ngram_mode': "'word'",
         'optimizer': "'hyper-1'",
-        'lr': '0.001',
-        'hyper_lr': '0.0001',
+        'lr': '0.0001',
+        'hyper_lr': '0.00001',
     },
     {
         'exp_id': "'test'",
         'model_used': "'fasttext'",
         'ngram_mode': "'subword'",
         'optimizer': "'hyper-1'",
-        'lr': '0.001',
-        'hyper_lr': '0.0001',
+        'lr': '0.0001',
+        'hyper_lr': '0.00001',
     }
 ]
 
@@ -55,13 +56,33 @@ def update_run_config_file_with_new_model(to_update: dict):
 
 def update_field_value(config_lines: list[str],
                        field_to_update: str,
-                       new_value: str):
-    field_line = [l for l in config_lines if field_to_update in l][0]
+                       new_value: str
+                       ) -> list[str]:
+    field_line_index, field_line = identify_field_line(config_lines,
+                                                       field_to_update)
     to_replace = field_line.split(' = ')[1]
     new_field_line = field_line.replace(to_replace, new_value + '\n')
-    new_config_lines = [l if l != field_line else new_field_line
-                        for l in config_lines]
-    return new_config_lines
+    config_lines[field_line_index] = new_field_line
+    return config_lines
+
+
+def identify_field_line(config_lines: list[str],
+                        field_to_update: str,
+                        ) -> str:
+    # Case for model parameter updated
+    if '.' in field_to_update:
+        model, field_to_update = field_to_update.split('.')
+        field_line_indices = [i for i, l in enumerate(config_lines)
+                              if field_to_update in l]
+        model_line_index = [i for i, l in enumerate(config_lines)
+                            if '[models.%s' % model in l][0]
+        field_line_index = min([l for l in field_line_indices
+                                if l > model_line_index])
+        return field_line_index, config_lines[field_line_index]
+    # Case for general parameter updated
+    else:
+        return [(i, l) for i, l in enumerate(config_lines)
+                if field_to_update in l][0]
 
 
 if __name__ == '__main__':

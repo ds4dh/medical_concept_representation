@@ -31,7 +31,7 @@
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 4_096  # 4_096  # 16_384  # 65_536
   n_epochs = 0  # total training epochs: if n_epochs set to 0, n_steps will be used
-  n_steps = 500_000  # total training steps: only used if n_epochs is set to 0
+  n_steps = 200_000  # total training steps: only used if n_epochs is set to 0
   n_steps_check_val = 10_000  # how many training steps between each validation
   n_sched_steps = 100_000  # (not used if optimizer = 'hyper')
   n_sched_warmup_steps = 1_000  # (not used if optimizer = 'hyper')

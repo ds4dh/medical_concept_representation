@@ -115,7 +115,6 @@ class PytorchLightningWrapper(pl.LightningModule):
     def validation_epoch_end(self, output):
         """ Log metrics from the output of the last validation step
         """
-        print('\nVisualizing trained model (during training)')
         metrics.visualization_task_ehr(self.model,
                                        self.pipeline.tokenizer,
                                        self.logger,
@@ -127,7 +126,6 @@ class PytorchLightningWrapper(pl.LightningModule):
         if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
 
     def test_epoch_end(self, output):
-        print('\nVisualizing trained model (final representation)')
         metrics.visualization_task_ehr(self.model,
                                        self.pipeline.tokenizer,
                                        self.logger,
