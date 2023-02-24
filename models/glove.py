@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Glove(nn.Module):
@@ -70,6 +71,7 @@ class Glove(nn.Module):
     def collapse_sequence_embeddings(self, embeddings, weights, dim=-2):
         """ Average sequence embedding over sequence dimension
         """
+        embeddings = F.normalize(embeddings, dim=0)
         if weights == None:  # classic average
             return embeddings.mean(dim=dim)
         else:  # weighted average

@@ -127,6 +127,7 @@ class FNet(nn.Module):
                 weights = weights[:self.max_seq_len - 1]
             else:
                 embeddings = embeddings[0, 1:-1]
+        embeddings = F.normalize(embeddings, dim=0)
         if weights == None:  # classic average
             return embeddings.mean(dim=dim)
         else:  # weighted average

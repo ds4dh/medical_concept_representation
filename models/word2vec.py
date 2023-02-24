@@ -49,8 +49,9 @@ class SkipGram(nn.Module):
             neg_context = input_dict['neg_context']
             pos_center = self.center_embeddings(pos_center)
             pos_context = self.context_embeddings(pos_context)
-            if len(pos_center.shape) > 2:  # ngram case
+            if len(pos_center.shape) > 2:  # ngram case (center word)
                 pos_center = self.combine_ngram_embeddings(pos_center, dim=-2)
+            if len(pos_context.shape) > 2:  # ngram case (context word)
                 pos_context = self.combine_ngram_embeddings(pos_context, dim=-2)
             neg_context = self.context_embeddings(neg_context)
             return {'pos_center': pos_center,
@@ -92,6 +93,7 @@ class SkipGram(nn.Module):
         """ Average sequence embedding over sequence dimension
             Each token in the sentence is weighted by inverse term frequency
         """
+        embeddings = F.normalize(embeddings, dim=0)
         if weights == None:  # classic average
             return embeddings.mean(dim=dim)
         else:  # weighted average

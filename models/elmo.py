@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from itertools import zip_longest
 from torch import relu, sigmoid
 
@@ -155,6 +156,7 @@ class ELMO(nn.Module):
         """ Average sequence embedding over sequence dimension
         """
         embeddings = embeddings[0, 1:-1]  # discard [BOS]/[EOS] token embeddings
+        embeddings = F.normalize(embeddings, dim=0)
         if weights == None:  # classic average
             return embeddings.mean(dim=dim)
         else:  # weighted average
