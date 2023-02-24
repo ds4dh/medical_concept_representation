@@ -112,25 +112,28 @@ class PytorchLightningWrapper(pl.LightningModule):
         """
         return self.step(batch, batch_idx, 'val')
         
-    def validation_epoch_end(self, output):
+    def on_validation_epoch_start(self):
         """ Log metrics from the output of the last validation step
         """
-        metrics.visualization_task_ehr(self.model,
-                                       self.pipeline.tokenizer,
-                                       self.logger,
-                                       self.global_step)
+        metric_params = {'model': self.model,
+                         'pipeline': self.pipeline,
+                         'logger': self.logger,
+                         'global_step': self.global_step}
+        metrics.visualization_task(**metric_params)
     
     def test_step(self, batch, batch_idx):
         """ Perform a testing step with the trained model
         """
         if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
 
-    def test_epoch_end(self, output):
-        metrics.visualization_task_ehr(self.model,
-                                       self.pipeline.tokenizer,
-                                       self.logger,
-                                       self.global_step)
-
+    def on_test_epoch_start(self):
+        metric_params = {'model': self.model,
+                         'pipeline': self.pipeline,
+                         'logger': self.logger,
+                         'global_step': self.global_step}
+        metrics.visualization_task(**metric_params)
+        metrics.prediction_task(**metric_params)
+        
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader
         """
@@ -213,6 +216,6 @@ if __name__ == '__main__':
             main()
         stats = pstats.Stats(pr)
         stats.sort_stats(pstats.SortKey.TIME) 
-        stats.print_stats()  # stats.dump_stats(filename='profiling.prof')
+        stats.dump_stats(filename='profiling.prof')
     else:
         main()

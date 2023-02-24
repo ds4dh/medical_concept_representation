@@ -8,31 +8,38 @@ CONFIG_DIR = os.path.abspath('configs')
 BASE_CONFIG_PATH = os.path.join(CONFIG_DIR, 'base_config.toml')
 RUN_CONFIG_PATH = os.path.join(CONFIG_DIR, 'run_config.toml')
 PARAM_SETS = [
+    # {
+    #     'exp_id': "'first_real_test'",
+    #     'model_used': "'word2vec'",
+    #     'ngram_mode': "'word'",
+    #     'n_steps': '100_000',
+    #     'optimizer': "'hyper-1'",
+    #     'hyper_lr': '0.00001',
+    #     'lr': '0.001',
+    #     'word2vec.d_embed': '512',
+    #     'word2vec.n_neg_samples': '0',  # softmax
+    # },
+    # {
+    #     'exp_id': "'first_real_test'",
+    #     'model_used': "'fasttext'",
+    #     'ngram_mode': "'subword'",
+    #     'n_steps': '100_000',
+    #     'optimizer': "'hyper-1'",
+    #     'hyper_lr': '0.00001',
+    #     'lr': '0.001',
+    #     'fasttext.d_embed': '512',
+    #     'fasttext.n_neg_samples': '0',  # softmax
+    # },
     {
-        'exp_id': "'test'",
+        'exp_id': "'first_real_test'",
         'model_used': "'glove'",
         'ngram_mode': "'word'",
+        'n_steps': '250_000',
         'optimizer': "'hyper-1'",
         'lr': '0.0001',
-        'hyper_lr': '0.00001',
-        # 'glove.d_embed': '200',
+        'hyper_lr': '0.000001',
+        'glove.d_embed': '512',
     },
-    {
-        'exp_id': "'test'",
-        'model_used': "'word2vec'",
-        'ngram_mode': "'word'",
-        'optimizer': "'hyper-1'",
-        'lr': '0.0001',
-        'hyper_lr': '0.00001',
-    },
-    {
-        'exp_id': "'test'",
-        'model_used': "'fasttext'",
-        'ngram_mode': "'subword'",
-        'optimizer': "'hyper-1'",
-        'lr': '0.0001',
-        'hyper_lr': '0.00001',
-    }
 ]
 
 
@@ -82,7 +89,7 @@ def identify_field_line(config_lines: list[str],
     # Case for general parameter updated
     else:
         return [(i, l) for i, l in enumerate(config_lines)
-                if field_to_update in l][0]
+                if field_to_update in l.split('#')[0]][0]
 
 
 if __name__ == '__main__':

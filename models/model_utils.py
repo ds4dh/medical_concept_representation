@@ -129,7 +129,7 @@ def update_and_save_config(config_path: str,
                                    run_params['exp_id'],
                                    model_name,
                                    'version_%s' % new_model_version,
-                                   'config.toml')
+                                   'run_config.toml')
     
     # Find model versions and update run parameters in case of later use
     old_model_version = run_params['model_version']

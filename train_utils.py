@@ -1,6 +1,6 @@
 import warnings
 import torch
-from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import _LRScheduler, OneCycleLR
 from gradient_descent_the_ultimate_optimizer import gdtuo
 from pytorch_lightning.callbacks import (
     LearningRateMonitor,
@@ -52,6 +52,11 @@ def select_scheduler(optimizer, train_params):
     elif train_params['scheduler'] == 'linear':
         sched_fn = LinearSchedulerWithWarmup
         sched_params.update({'n_steps': train_params['n_sched_steps']})
+    elif train_params['scheduler'] == 'onecycle':
+        return OneCycleLR(optimizer=optimizer,
+                          max_lr=train_params['lr'],
+                          total_steps=train_params['n_sched_steps'],
+                          pct_start=0.05)
     else:
         raise ValueError('Invalid scheduler given to the pipeline.')
     return sched_fn(**sched_params)
