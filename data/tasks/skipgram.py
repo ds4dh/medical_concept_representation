@@ -66,7 +66,7 @@ class SkipGramMaker(IterDataPipe):
                 context_pos = center_pos + i
                 if not 0 < context_pos < len(sentence) or i == 0:
                     continue
-
+                
                 # Softmax case
                 if self.n_neg_samples == 0:
                     context_token_id = sentence[context_pos]

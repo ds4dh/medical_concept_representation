@@ -65,7 +65,38 @@ class Encoder(IterDataPipe):
         """
         assert isinstance(sample, list), 'Bad input type %s' % type(sample)
         return [self.tokenizer.encode(word) for word in sample]
+    
+
+class TokenFilter(IterDataPipe):
+    def __init__(self, dp, to_remove=[], to_split=[]):
+        """ Clean samples with token filters and/or split by matching tokens
+        """
+        super().__init__()
+        self.dp = dp
+        self.to_remove = to_remove
+        self.to_split = to_split
         
+    def __iter__(self):
+        for sample in self.dp:
+            if isinstance(sample, dict):
+                yield {k: sample[k] if 'label' in k  # avoid acting on labels
+                       else self.filter_fn(sample[k]) for k in sample.keys()}
+            else:
+                yield self.filter_fn(sample)
+                
+    def filter_fn(self, sample):
+        """ Filter out tokens that contains tokens to remove and, if required,
+            split the sample by matching split tokens
+        """
+        sample = [w for w in sample if not any(s in w for s in self.to_remove)]
+        if len(self.to_split) == 0:
+            return sample
+        else:
+            return (
+                [w for w in sample if not any(s in w for s in self.to_split)],
+                [w for w in sample if any(s in w for s in self.to_split)],
+            )
+            
 
 class TokenShuffler(IterDataPipe):
     """ Shuffle tokens inside sample sequences with some probability

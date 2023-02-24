@@ -44,6 +44,7 @@ class DataPipeline():
         
         # Build task-specific pipeline
         dp = data.JsonReader(self.data_fulldir, split)
+        dp = data.TokenFilter(dp, self.run_params['ngrams_to_remove'])
         dp = data.Encoder(dp, self.tokenizer)
         dp = data.TokenShuffler(dp, self.run_params['token_shuffle_prob'])
         dp = self.select_task_pipeline(dp, task, split)
@@ -96,6 +97,7 @@ class DataPipeline():
         
         # If tokenizer was not loaded, train the tokenizer using train dataset
         dp = data.JsonReader(self.data_fulldir, 'train')
+        dp = data.TokenFilter(dp, self.run_params['ngrams_to_remove'])
         list_with_all_data = [token for sentence in dp for token in sentence]
         tokenizer.fit(list_with_all_data)
         print(' - Trained tokenizer - voc: %s' % tokenizer.vocab_sizes)
