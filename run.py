@@ -131,13 +131,17 @@ class PytorchLightningWrapper(pl.LightningModule):
                          'pipeline': self.pipeline,
                          'logger': self.logger,
                          'global_step': self.global_step}
-        metrics.visualization_task(**metric_params)
+        # metrics.visualization_task(**metric_params)
         metrics.prediction_task(**metric_params)
         
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader
         """
         pl = self.pipeline.get_pipeline(MODEL_PARAMS['task'], split, shuffle)
+        if split == 'test':    # for debug
+            for sample in pl:  # for debug
+                pl = [sample]  # for debug
+                break          # for debug
         return DataLoader(dataset=pl,
                           batch_size=None,  # batch_size is set by pipeline
                           num_workers=RUN_PARAMS['num_workers'],

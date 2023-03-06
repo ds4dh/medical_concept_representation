@@ -154,8 +154,11 @@ def set_environment(run_params: int):
     if run_params['num_workers'] > 0:
         os.environ['TOKENIZERS_PARALLELISM'] = 'true'
     if torch.cuda.is_available():
+        if run_params['gpu_index'] >= torch.cuda.device_count()\
+        or run_params['gpu_index'] < 0:
+            raise ValueError('Invalid GPU index')
         accelerator = 'gpu'
-        devices = [torch.cuda.device_count() - 1]  # last gpu index
+        devices = [run_params['gpu_index']]
     else:
         accelerator = 'cpu'
         devices = 'auto'
