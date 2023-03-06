@@ -1,3 +1,5 @@
+import cProfile
+import pstats
 import pytorch_lightning as pl
 import numpy as np
 import torch
@@ -7,18 +9,28 @@ import data
 import tempfile
 from tqdm import tqdm
 from PIL import Image
+from sklearn.metrics import (
+    roc_curve,
+    auc as auroc,
+    precision_recall_curve as pr_curve,
+    average_precision_score as auprc
+)
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import minmax_scale
 
-MAX_SAMPLES = 100  # np.inf  # used for debug if < np.inf
+
+MAX_SAMPLES = 200  # np.inf  # used for debug if < np.inf
+PARTIALS = [0.0, 0.1, 0.3, 0.6, 1.0]  # None
 TOPKS = [1, 3, 10, 30]
 N_MATCHES = [1, 2, 3, 4, 0]
 MULTI_PARAMS = [{'topk': k, 'n_matches': m} for k in TOPKS for m in N_MATCHES]
 MULTI_CATEGORIES = ['DIA_', 'PRO_', 'MED_']
 BINARY_CLASSES = {
-    'mortality': ['DEM_ALIVE', 'DEM_DEAD'],
-    'readmission': ['DEM_AWAY', 'DEM_READM'],
-    'length_of_stay': ['DEM_SHORT', 'DEM_LONG'],
+    'mortality': ['LBL_ALIVE', 'LBL_DEAD'],
+    'readmission': ['LBL_AWAY', 'LBL_READM'],
+    'length-of-stay': ['LBL_SHORT', 'LBL_LONG'],
 }
+BINARY_LEVELS = [t for v in BINARY_CLASSES.values() for t in v]
 MULTI_PLOT_PARAMS = {
     k: {'lw': 2, 'color': 'C%s' % i, 'label': 'top-%s' % k}
     for i, k in enumerate(TOPKS)
@@ -28,6 +40,17 @@ BINARY_PLOT_PARAMS = {
     'color': ['%s' % (i / len(BINARY_CLASSES))
               for i, _ in enumerate(BINARY_CLASSES)],
 }
+THRESHOLDS = np.linspace(0.0, 1.0, 100)
+
+
+def profile_it(fn):
+    def profiled_fn(*args, **kwargs):
+        with cProfile.Profile() as pr:
+            fn(*args, **kwargs)
+        stats = pstats.Stats(pr)
+        stats.sort_stats(pstats.SortKey.TIME) 
+        stats.dump_stats(filename='profiling.prof')
+    return profiled_fn
 
 
 def prediction_task(model: torch.nn.Module,
@@ -39,15 +62,18 @@ def prediction_task(model: torch.nn.Module,
         are separated from the patient code sequence, and patient embeddings
         predict target tokens in an unsupervised way, using cosine similarity 
     """
-    multi_accuracy, binary_accuracy = {}, {}
+    print('\nProceeding with prediction testing metric')
+    multi_accuracy, binary_perf = {}, {}
     for cat in MULTI_CATEGORIES:
         multi_accuracy[cat] = compute_prediction_multi(model, pipeline, cat)
+        exit()
     for k, v in BINARY_CLASSES.items():
-        binary_accuracy[k] = compute_prediction_binary(model, pipeline, v)
-    figure = generate_figure(multi_accuracy, binary_accuracy)
+        binary_perf[k] = compute_prediction_binary(model, pipeline, v)
+    figure = generate_figure(multi_accuracy, binary_perf)
     log_figure_to_tensorboard(figure, 'prediction_metric', logger, global_step)
-        
+    
 
+@profile_it
 def compute_prediction_multi(model: torch.nn.Module,
                              pipeline: data.DataPipeline,
                              cat: str,
@@ -59,39 +85,68 @@ def compute_prediction_multi(model: torch.nn.Module,
         - Top-k accuracy is computed based on cosine similarity
     """
     # Retrieve labels and initialize
+    unk_encoding = pipeline.tokenizer.encode('[UNK]')
     label_encodings, label_embeddings = get_labels_multi(model, pipeline, cat)
     to_remove = pipeline.run_params['ngrams_to_remove']
-    dp = data.JsonReader(pipeline.data_fulldir, 'test')
+    dp = data.JsonReader(pipeline.data_fulldir, 'valid')
     dp = data.TokenFilter(dp, to_remove=to_remove, to_split=[cat])
     
     # Compute patient embeddings and store gold labels
     input_embeddings, golds = [], []
-    loop = tqdm(dp, desc=' - Embedding patients (without %s tokens)' % cat)
+    loop = tqdm(dp, desc=' - Embedding patients (no %s tokens)' % cat)
     for n, (sample, gold) in enumerate(loop):
         if n > MAX_SAMPLES: break
         if len(gold) == 0: continue
-        golds.append([pipeline.tokenizer.encode(g) for g in gold])
         input_embeddings.append(get_input_embedding(model, sample, pipeline))
+        encoded_gold = [pipeline.tokenizer.encode(g) for g in gold]
+        golds.append([e for e in encoded_gold if e != unk_encoding])
     
-    # # TODO: Train a linear regression with golds and embeddings
-    # import pdb; pdb.set_trace()
-    # exit()  # in case
+    # # TODO: Train a linear regression with golds and embeddings?
     
     # Compute similarities between patient embeddings and tokens of the category
-    print(' - Computing similarities between patient embeddings and tokens')
-    input_embeddings = torch.stack(input_embeddings, dim=0)
+    print(' - Comparing patient embeddings to %s tokens' % cat)
+    input_embeddings = torch.cat(input_embeddings, dim=0)
     similarities = cosine_similarity(input_embeddings, label_embeddings)
-    topk_maxs = np.argsort(similarities, axis=-1)[:, :-max(TOPKS):-1]
+    class_eye = np.eye(len(label_encodings))  # used to speed-up computations
     
     # Compute top-k accuracy for exact and different n-char lenient matches
-    hits, trials = [0 for _ in MULTI_PARAMS], 0
-    loop = tqdm(zip(topk_maxs, golds), desc=' - Predicting %s' % cat)
-    for topk_max, gold in loop:
-        for i, p in enumerate(MULTI_PARAMS):  # different task settings
-            topk = [label_encodings[k] for k in topk_max[:p['topk']]]
-            hits[i] += compute_hit_multi(topk, gold, pipeline, p['n_matches'])
-        trials += 1
-    return [h / trials for h in hits]
+    # hits, trials = [0 for _ in MULTI_PARAMS], 0
+    # topk_maxs = np.argsort(similarities, axis=-1)[:, :-max(TOPKS):-1]
+    # for topk_max, gold in tqdm(zip(topk_maxs, golds), desc='test'):
+    #     for i, p in enumerate(MULTI_PARAMS):  # different task settings
+    #         topk = [label_encodings[k] for k in topk_max[:p['topk']]]
+    #         hits[i] += compute_hit_multi(topk, gold, pipeline, p['n_matches'])
+    #     trials += 1
+    # return [h / trials for h in hits]
+    perf = {}
+    for i, partial in enumerate(PARTIALS):
+        TP, FP, FN = np.zeros((3, len(THRESHOLDS)))
+        for similarity, gold in tqdm(zip(similarities[i::len(PARTIALS)], golds),
+                                     desc='test'):
+            prob = minmax_scale(similarity)
+            gold_ids = [label_encodings.index(g) for g in gold]
+            sample_tp, sample_fp, sample_fn = compute_tp_fp_fn(prob,
+                                                               gold_ids,
+                                                               class_eye)
+            TP += sample_tp; FP += sample_fp; FN += sample_fn
+        precision = [tp / (tp + fp) for tp, fp in zip(TP, FP)]
+        recall = [tp / (tp + fn) for tp, fn in zip(TP, FN)]
+        perf[partial] = {'prec': precision, 'rec': recall}
+                    
+
+def single_hot(label_list, class_eye):
+    """ Like a one-hot matrix, summed over label dimension
+    """
+    return class_eye[label_list].sum(axis=0)
+
+
+def compute_tp_fp_fn(prob, gold_ids, class_eye):
+    single_hot_gold = single_hot(gold_ids, class_eye)[np.newaxis, :]
+    preds = np.tile(prob, (len(THRESHOLDS), 1)) > THRESHOLDS[:, np.newaxis]
+    tp = (preds * single_hot_gold).sum(axis=1)
+    fp = (preds * (1 - single_hot_gold)).sum(axis=1)
+    fn = len(gold_ids) - tp
+    return tp, fp, fn
 
 
 def compute_prediction_binary(model: torch.nn.Module,
@@ -105,30 +160,44 @@ def compute_prediction_binary(model: torch.nn.Module,
         - Accuracy is computed based on cosine similarity (closest = prediction)
     """
     # Retrieve labels and initialize
-    class_encodings, class_embeddings = get_labels_binary(model, pipeline, classes)
-    to_remove = pipeline.run_params['ngrams_to_remove']
+    class_embeddings = get_labels_binary(model, pipeline, classes)
+    to_remove = pipeline.run_params['ngrams_to_remove'] +\
+                [t for t in BINARY_LEVELS if t not in classes]
     dp = data.JsonReader(pipeline.data_fulldir, 'test')
     dp = data.TokenFilter(dp, to_remove=to_remove, to_split=classes)
     
     # Compute patient embeddings and store gold labels
     input_embeddings, golds = [], []
-    loop = tqdm(dp, desc=' - Embedding patients, removing %s' % classes)
-    for n, (sample, gold) in enumerate(loop):
+    loop = tqdm(enumerate(dp),
+                desc=' - Embedding patients (no %s tokens)' % classes)
+    for n, (sample, gold) in loop:
         if n > MAX_SAMPLES: break
         input_embeddings.append(get_input_embedding(model, sample, pipeline))
         golds.append(gold)
     
     # Compute similarities between patient embeddings and class tokens
-    print(' - Computing similarities between patient embeddings and classes')
-    input_embeddings = torch.stack(input_embeddings, dim=0)
+    print(' - Comparing patient embeddings to %s tokens' % classes)
+    input_embeddings = torch.cat(input_embeddings, dim=0)
     similarities = cosine_similarity(input_embeddings, class_embeddings)
     
-    # Return accuracy for the prediction task given by the class labels
-    hits = []
-    loop = tqdm(zip(similarities, golds), desc=' - Predicting %s' % classes)
-    for similarity, gold in loop:
-        hits.append(class_encodings[np.argmax(similarity)] in gold)
-    return sum(hits) / len(golds)
+    # Compute prediction of probability based on cosine similarity with labels
+    perf = {}
+    for i, partial in enumerate(PARTIALS):
+        probs, trues = [], []
+        for similarity, gold in zip(similarities[i::len(PARTIALS)], golds):
+            distance = 1.0 - similarity
+            probs.append(distance[0] / distance.sum())  # between 0.0 and 1.0
+            trues.append(classes.index(gold[0]))  # index of true
+        
+        # Compute area under the receiver operating characteristic curve
+        fpr, tpr, _ = roc_curve(trues, probs, pos_label=1)
+        prec, rec, _ = pr_curve(trues, probs, pos_label=1)
+        metric_auroc = auroc(fpr, tpr)
+        metric_auprc = auprc(trues, probs, pos_label=1)
+        perf[partial] = {'fpr': fpr, 'tpr': tpr, 'auroc': metric_auroc,
+                         'prec': prec, 'rec': rec, 'auprc': metric_auprc}
+    
+    return perf
 
 
 def get_labels_multi(model: torch.nn.Module,
@@ -162,6 +231,7 @@ def get_labels_binary(model: torch.nn.Module,
 def get_input_embedding(model: torch.nn.Module,
                         sample: list[str],
                         pipeline: data.DataPipeline,
+                        mode: str='partial',  # 'full', 'partial'
                         ) -> torch.Tensor:
     """ Generate a sequence embedding for a patient sample in which tokens that
         do not belong to a given category were removed
@@ -173,8 +243,21 @@ def get_input_embedding(model: torch.nn.Module,
         weights = [1 / pipeline.tokenizer.word_counts[t[0]] for t in encoded]
     else:
         weights = [1 / pipeline.tokenizer.word_counts[t] for t in encoded]
-    return model.get_sequence_embeddings(encoded, weights)
-
+    if mode == 'full':
+        return model.get_sequence_embeddings(encoded, weights)
+    else:
+        fixed_enc = [encoded[n] for n, t in enumerate(sample)
+                     if 'DEM_' in t and not any([s in t for s in BINARY_CLASSES])]
+        fixed_wgt = [weights[n] for n, t in enumerate(sample) if 'DEM_' in t]
+        timed_idx = [n for n, t in enumerate(sample) if 'DEM_' not in t]
+        sentence_embeddings = []
+        for partial in PARTIALS:
+            partial_timed_idx = timed_idx[:int(len(timed_idx) * partial)]
+            enc = fixed_enc + [encoded[i] for i in partial_timed_idx]
+            wgt = fixed_wgt + [weights[i] for i in partial_timed_idx]
+            sentence_embeddings.append(model.get_sequence_embeddings(enc, wgt))
+        return torch.stack(sentence_embeddings, dim=0)
+    
 
 def compute_hit_multi(topk_indices: np.ndarray,
                       gold_indices: list,
@@ -196,46 +279,55 @@ def compute_hit_multi(topk_indices: np.ndarray,
     return int(any([g in topk_indices for g in gold_indices]))
 
 
-def generate_figure(multi_accuracy_results: dict[str, list[float]],
-                    binary_accuracy_results: dict[str, float]
+def generate_figure(multi_task_results: dict[str, list[float]],
+                    binary_task_results: dict[str, float]
                     ) ->  matplotlib.figure.Figure:
     """ Generate a big figure that contains all plots of the prediction task
     """
     # Multi category prediction plot
-    n_graphs = len(multi_accuracy_results) + 1
-    fig = plt.figure(figsize=(n_graphs * 5, 4))
-    x_axis = range(len(N_MATCHES))
-    x_tick_labels = [str(n) if n > 0 else 'Exact' for n in N_MATCHES]
-    for i, (cat, accuracies) in enumerate(multi_accuracy_results.items()):
-        ax = plt.subplot(1, n_graphs, i + 1)
-        for k in TOPKS:
-            matching_indices = [[p['topk'] == k and p['n_matches'] == n
-                                for p in MULTI_PARAMS].index(True)
-                                for n in N_MATCHES]
-            accuracies_to_plot = [accuracies[i] for i in matching_indices]
-            ax.plot(x_axis, accuracies_to_plot, '-o', **MULTI_PLOT_PARAMS[k])
-        ax.set_xticks(x_axis)
-        ax.set_xticklabels(x_tick_labels)
-        ax.tick_params(labelsize=10)
-        ax.set_xlabel('Character match (%s)' % cat[:-1], fontsize=12)
-        ax.set_ylabel('Top-k accuracy', fontsize=12)
-        ax.set_ylim([-0.05, 1.05])
-        ax.legend(loc='lower left', ncols=len(TOPKS) // 2, fontsize=10)
+    fig = plt.figure(figsize=(15, 10))
+    # x_axis = range(len(N_MATCHES))
+    # x_tick_labels = [str(n) if n > 0 else 'Exact' for n in N_MATCHES]
+    # for i, (cat, accuracies) in enumerate(multi_task_results.items()):
+    #     ax = plt.subplot(3, 3, i + 1)
+    #     for k in TOPKS:
+    #         matching_indices = [[p['topk'] == k and p['n_matches'] == n
+    #                             for p in MULTI_PARAMS].index(True)
+    #                             for n in N_MATCHES]
+    #         accuracies_to_plot = [accuracies[i] for i in matching_indices]
+    #         ax.plot(x_axis, accuracies_to_plot, '-o', **MULTI_PLOT_PARAMS[k])
+    #     ax.set_xticks(x_axis)
+    #     ax.set_xticklabels(x_tick_labels)
+    #     ax.tick_params(labelsize=10)
+    #     ax.set_xlabel('Character match (%s)' % cat[:-1], fontsize=12)
+    #     ax.set_ylabel('Top-k accuracy', fontsize=12)
+    #     ax.set_ylim([-0.05, 1.05])
+    #     ax.legend(loc='lower left', ncols=len(TOPKS) // 2, fontsize=10)
+    #     ax.grid()
+    
+    # Binary prediction plot (auroc)
+    for i, (cat, result) in enumerate(binary_task_results.items()):
+        ax = plt.subplot(3, 3, 3 + i + 1)
+        for i, (partial, perf) in enumerate(result.items()):
+            label = 'Partial: %s - AUROC: %.02f' % (partial, perf['auroc'])
+            ax.plot(perf['fpr'], perf['tpr'], color='C%1i' % i, label=label)
+        ax.plot((0, 1), (0, 1), '--', color='gray')
+        ax.set_xlabel('False positive rate (%s)' % cat, fontsize=12)
+        ax.set_ylabel('True postive rate (%s)' % cat, fontsize=12)
+        ax.legend()
         ax.grid()
     
-    # Binary prediction plot
-    x_axis = [n + 0.5 for n, _ in enumerate(binary_accuracy_results.keys())]
-    labels = [' '.join(l.capitalize().split('_'))
-              for l in binary_accuracy_results.keys()]
-    to_plot = binary_accuracy_results.values()
-    ax = plt.subplot(1, n_graphs, n_graphs)
-    ax.bar(labels, to_plot, **BINARY_PLOT_PARAMS)
-    ax.set_ylim([0.0, 1.0])
-    ax.set_xlabel('Prediction task', fontsize=12)
-    ax.set_ylabel('Accuracy', fontsize=12)
-    ax.grid()
-    ax.set_axisbelow(True)
-    
+    # Binary prediction plot (auprc)
+    for i, (cat, result) in enumerate(binary_task_results.items()):
+        ax = plt.subplot(3, 3, 6 + i + 1)
+        for i, (partial, perf) in enumerate(result.items()):
+            label = 'Partial: %s - AUPRC: %.02f' % (partial, perf['auprc'])
+            ax.plot(perf['rec'], perf['prec'], color='C%1i' % i, label=label)
+        ax.set_xlabel('Recall (%s)' % cat, fontsize=12)
+        ax.set_ylabel('Precision (%s)' % cat, fontsize=12)
+        ax.legend()
+        ax.grid()
+
     # Send figure to tensorboard
     return fig 
 

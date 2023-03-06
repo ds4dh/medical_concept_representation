@@ -46,7 +46,9 @@ class DataPipeline():
         dp = data.JsonReader(self.data_fulldir, split)
         dp = data.TokenFilter(dp, self.run_params['ngrams_to_remove'])
         dp = data.Encoder(dp, self.tokenizer)
-        dp = data.TokenShuffler(dp, self.run_params['token_shuffle_prob'])
+        dp = data.TokenShuffler(dp,
+                                self.run_params['token_shuffle_prob'],
+                                self.run_params['token_shuffle_mode'])
         dp = self.select_task_pipeline(dp, task, split)
         dp = data.CustomBatcher(dp, self.max_tokens, self.max_seq_len, shuffle)
         dp = data.TorchPadder(dp, self.tokenizer)

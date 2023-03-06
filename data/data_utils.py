@@ -101,10 +101,16 @@ class TokenFilter(IterDataPipe):
 class TokenShuffler(IterDataPipe):
     """ Shuffle tokens inside sample sequences with some probability
     """
-    def __init__(self, dp, token_shuffle_prob=0.0):
+    def __init__(self, dp, shuffle_prob=0.0, shuffle_mode='partial'):
         super().__init__()
         self.dp = dp
-        self.token_shuffle_prob = token_shuffle_prob
+        self.shuffle_prob = shuffle_prob
+        assert shuffle_mode in ['whole', 'partial'],\
+            'Invalid shuffle mode [whole, partial]'
+        if shuffle_mode == 'whole':
+            self.shuffle_fn = self.full_shuffle_fn
+        elif shuffle_mode == 'partial':
+            self.shuffle_fn = self.partial_shuffle_fn
     
     def __iter__(self):
         for sample in self.dp:
@@ -114,10 +120,23 @@ class TokenShuffler(IterDataPipe):
             else:
                 yield self.shuffle_fn(sample)
     
-    def shuffle_fn(self, sample):
+    def full_shuffle_fn(self, sample):
         """ Shuffle a list of tokens with some probability
         """
-        if random.random() < self.token_shuffle_prob: random.shuffle(sample)
+        if random.random() < self.shuffle_prob: random.shuffle(sample)
+        return sample
+    
+    def partial_shuffle_fn(self, sample):
+        """ Insert a fraction of the tokens of a list at random positions
+        """
+        if self.shuffle_prob == 0.0: return sample
+        n_elem_shuffled = int(len(sample) * self.shuffle_prob)
+        to_shuffle = random.sample(sample, n_elem_shuffled)
+        sample = [x for x in sample if x not in to_shuffle]
+        random.shuffle(to_shuffle)
+        for elem in to_shuffle:
+            idx = random.randint(0, len(sample))
+            sample.insert(idx, elem)
         return sample
 
 

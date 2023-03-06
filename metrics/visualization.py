@@ -10,71 +10,32 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 
 
-# Data parameters computed using vocab_count of data.pipeline.tokenizer
-# pprint({i: sum([counts[c] for c in counts if 'PRO_%s' % i in c]) for i in
-#         ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N',
-#          'O', 'P', 'Q', 'R', 'S', 'T' 'U', 'V', 'W', 'X', 'Y' 'Z']})
-COUNTS = {
-    'DIA_': {
-        '0': 1864, '1': 127, '2': 2322, '3': 92, '4': 518, '5': 1056, '6': 13,
-        '7': 1393, '9': 1322, 'A': 25563, 'B': 58675, 'C': 75211, 'D': 152666,
-        'E': 437974, 'F': 258978, 'G': 145767, 'H': 30337, 'I': 586006,
-        'J': 143878, 'K': 253130, 'L': 52071, 'M': 151653, 'N': 181119,
-        'O': 59641, 'P': 14, 'Q': 8793, 'R': 296604, 'S': 57747, 'T': 80214,
-        'V': 13056, 'W': 24100, 'X': 5664, 'Y': 95488, 'Z': 590571,
-    },
-    'PRO_': {
-        '0': 328080, '1': 13363, '2': 1375, '3': 43818, '4': 28270, '5': 37023,
-        '6': 698, '8': 1794, 'A': 8046, 'B': 54164, 'C': 473, 'D': 2109,
-        'F': 897, 'G': 3207, 'H': 884, 'L': 38, 'S': 190, 'X': 71,
-    },
-    'MED_': {
-        '0': 5264, 'A': 4320236, 'B': 1233614, 'C': 1452716, 'D': 263891,
-        'G': 46747, 'H': 189027, 'J': 698460, 'L': 65901, 'M': 101169,
-        'N': 2046850, 'P': 7411, 'R': 260230, 'S': 164420, 'V': 49583,
-    }
-}
-CATEGORY_SUBLEVELS_MIMIC_NOT_CLEAN = {
-    cat: [[t] for t in COUNTS[cat].keys()] for cat in COUNTS.keys()
-}
-FREQS = {
-    k: {kk: vv / sum(v.values()) for kk, vv in v.items()}
-    for k, v in COUNTS.items()
-}
-FREQUENCY_TRESHOLD = 0.01
 CATEGORY_SUBLEVELS_FREQUENT = {
-    k: [k for k, v in v.items() if v > FREQUENCY_TRESHOLD]
-    for k, v in FREQS.items()
-}
-CATEGORY_SUBLEVELS_FREQUENT = {  # here computed with FREQUENT_TRESHOLD = 0.01
-    'DIA_': [('B',), ('C',), ('D',), ('E',), ('F',), ('G',), ('I',), ('J',),
-             ('K',), ('L',), ('M',), ('N',), ('O',), ('R',), ('S',), ('T',),
-             ('Y',), ('Z')],
-    'PRO_': [('0',), ('1',), ('3',), ('4',), ('5',), ('A',), ('B',)],
-    'MED_': [('A',), ('B',), ('C',), ('D',), ('H',), ('J',), ('N',), ('R',),
-             ('S',)]
+    'DIA_': [('C',), ('D',), ('F',), ('G',), ('H',), ('I',), ('J',), ('K',),
+             ('L',), ('M',), ('N',), ('O',), ('R',), ('S',), ('T',), ('Z',)],
+    'PRO_': [('00',), ('04',), ('0B',), ('0D',), ('0F',), ('0H',), ('0J',),
+             ('0Q',), ('0S',), ('0T',), ('0U',), ('0W',), ('3',), ('B',)],
+    'MED_': [('A',), ('B',), ('C',), ('D',), ('G',), ('J',), ('L',), ('N',),
+             ('R',), ('S',)],
 }
 CATEGORY_SUBLEVELS_OFFICIAL = {
     'DIA_': [('A', 'B',), ('C', 'D0', 'D1', 'D2', 'D3', 'D4',),
              ('D5', 'D6', 'D7', 'D8', 'D9',), ('E',), ('F',), ('G',),
              ('H0', 'H1', 'H2', 'H3', 'H4', 'H5',), ('H6', 'H7', 'H8', 'H9',),
              ('I',), ('J',), ('K',), ('L',), ('M',), ('N',), ('O',), ('P',),
-             ('Q',), ('R',), ('S', 'T',), ('V', 'W', 'X', 'Y',), ('Z',),
-             ('U',)],
+             ('Q',), ('R',), ('S', 'T',), ('V', 'W', 'X', 'Y',), ('Z',), ('U',)],
     'PRO_': [('0',), ('1',), ('2',), ('3',), ('4',), ('5',), ('6',), ('7',),
-             ('8',), ('9',), ('B',), ('C',), ('D',), ('F',), ('G',), ('H',),
-             ('X',)],
+             ('8',), ('9',), ('B',), ('C',), ('D',), ('F',), ('G',), ('H',), ('X',)],
     'MED_': [('A',), ('B',), ('C',), ('D',), ('G',), ('H',), ('J',), ('L',),
              ('M',), ('N',), ('P',), ('R',), ('S',), ('V',)],
 }
 CATEGORY_SUBLEVELS_FERNANDO = {  # why these?
-    'DIA_': [('S'), ('T',), ('O',), ('P',), ('F',), ('J',), ('K',), ('I',),
-             ('N',)],
+    'DIA_': [('F',), ('I',), ('J',), ('K',), ('N',), ('O',), ('P',), ('S',), ('T',)],
     'PRO_': [('00',), ('02',), ('04',), ('0B',), ('0D',), ('0F',), ('0H',),
              ('0S',), ('0T',), ('0U',)],
     'MED_': [('C',), ('J',), ('L',), ('N',), ('R',), ('S',)]
 }
-CATEGORY_SUBLEVELS = CATEGORY_SUBLEVELS_FERNANDO
+CATEGORY_SUBLEVELS = CATEGORY_SUBLEVELS_FREQUENT
 
 # Metric parameters
 DIMENSIONALITY_REDUCTION_ALGORITHM = 'tsne'  # 'pca', 'tsne'
@@ -85,7 +46,11 @@ assert REDUCED_DIMENSIONALITY in [2, 3], 'Invalid reduced dimensionality [2, 3]'
 FIG_SIZE = (14, 8)
 BASE_TEXT_SIZE = 8
 MARKER_SIZE = BASE_TEXT_SIZE * 2
-ALL_COLORS = (list(plt.cm.tab10(np.arange(10))) + ["crimson", "indigo"]) * 10
+ALL_COLORS = 10 * (list(plt.cm.tab10(np.arange(10))) + ['w'])
+ALL_COLORS = ('#ffffff', '#000000', '#e6194b', '#3cb44b', '#ffe119', '#0082c8',
+              '#46f0f0', '#f032e6', '#d2f53c', '#fabebe', '#008080', '#e6beff',
+              '#aa6e28', '#fffac8', '#800000', '#aaffc3', '#808000', '#ffd8b1',
+              '#000080', '#808080', '#f58231', '#911eb4') * 10
 LEGEND_PARAMS = {
     'loc': 'upper center',
     'bbox_to_anchor': (0.5, -0.05),
@@ -109,8 +74,10 @@ def visualization_task(model: torch.nn.Module,
     """ Reduce the dimensionality of concept embeddings for different categories
         and log a scatter plot of the low-dimensional data to tensorboard
     """
+    print('\nProceeding with prediction testing metric')
     fig = plt.figure(figsize=FIG_SIZE)
     for subplot_idx, category in enumerate(CATEGORY_SUBLEVELS.keys()):
+        print(' - Reducing dimensionality and visualizing %s tokens' % category)
         token_info = get_token_info(model, pipeline.tokenizer, category)
         reduced = compute_reduced_representation(token_info['embedded'])
         plot_reduced_data(reduced, fig, token_info, category, subplot_idx)
@@ -141,7 +108,7 @@ def plot_reduced_data(reduced_data: np.ndarray,
     for label, color in zip(unique_labels, unique_colors):
         data = reduced_data[[l == label for l in label_array]]
         data = [data[:, i] for i in range(data.shape[-1])]
-        ax.scatter(*data, **SCATTER_PARAMS, color=color, label=label)
+        ax.scatter(*data, **SCATTER_PARAMS, color=color, label='-'.join(label))
         
     # Add token indices as text annotation a few data point
     for word, coord in zip(token_info['tokens'], reduced_data):
@@ -151,7 +118,7 @@ def plot_reduced_data(reduced_data: np.ndarray,
             
     # Polish figure
     ax.margins(x=0.0, y=0.0)
-    ax.legend(**LEGEND_PARAMS, ncol=len(unique_labels) // 2)
+    ax.legend(**LEGEND_PARAMS, ncol=5)  # len(unique_labels) // 2)
     ax.set_xticklabels([])
     ax.set_yticklabels([])
     if data_dim > 2: ax.set_zticklabels([])
