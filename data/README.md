@@ -1,5 +1,16 @@
-Datasets have been uploaded as a zip archive to Google Drive:
-- Download the zip archive using the [following link](https://drive.google.com/file/d/1gjaWxg22OTOnQOxp9OVN2aFfqXY0xaYl/view?usp=sharing)
-- Unzip the zip archive (containing a json folder) in the directory of your choice.
-- Ideally, the data files should go in data/datasets/dataset_name, but this is up to you.
-- In any case, the directory of your choice should be set in config.toml.
+The raw data files are not available in this repository. To access it, go to https://physionet.org/content/mimiciv/2.2/. Only credentialed users who sign the DUA can access the files.
+
+Once you have access to the files, you should upload them at the following locations of your local repository:
+- data/datasets/mimic-iv-2.2/hosp/admissions.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/patients.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/transfers.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/diagnoses_icd.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/procedures_icd.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/prescriptions.csv.gz
+- data/datasets/mimic-iv-2.2/hosp/labevents.csv.gz
+
+You can then build the pre-processed datasets, using the following command:
+```
+python data/datasets/mimic-iv-2.2/process_mimic.py
+
+```
