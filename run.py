@@ -43,7 +43,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         self.automatic_optimization = ('hyper' not in TRAIN_PARAMS['optimizer'])
         self.input_keys = set(MODEL_PARAMS['input_keys'])
         self.label_keys = set(MODEL_PARAMS['label_keys'])
-    
+        
     def configure_optimizers(self):
         """ Return the optimizer and the scheduler
         """
@@ -98,7 +98,7 @@ class PytorchLightningWrapper(pl.LightningModule):
             self.log('hyper/%s' % k, v)
         self.log('loss/train', loss.cpu().detach(), batch_size=btch_sz)
         return {'loss': loss}
-
+    
     def training_step(self, batch, batch_idx):
         """ Perform training step and return loss (see step)
         """
@@ -106,7 +106,7 @@ class PytorchLightningWrapper(pl.LightningModule):
             return self.hyper_optim_step(batch, batch_idx)
         else:
             return self.step(batch, batch_idx, 'train')
-
+        
     def validation_step(self, batch, batch_idx):
         """ Perform validation step and return loss (see step)
         """
@@ -115,25 +115,29 @@ class PytorchLightningWrapper(pl.LightningModule):
     def on_validation_epoch_start(self):
         """ Log metrics from the output of the last validation step
         """
-        metric_params = {'model': self.model,
-                         'pipeline': self.pipeline,
-                         'logger': self.logger,
-                         'global_step': self.global_step}
-        metrics.visualization_task(**metric_params)
-    
+        pass
+        # metric_params = {'model': self.model,
+        #                  'pipeline': self.pipeline,
+        #                  'logger': self.logger,
+        #                  'global_step': self.global_step}
+        # metrics.visualization_task(**metric_params)
+        
     def test_step(self, batch, batch_idx):
         """ Perform a testing step with the trained model
         """
         if not DO_TEST_ONLY: return self.step(batch, batch_idx, 'test')
-
+        
     def on_test_epoch_start(self):
         metric_params = {'model': self.model,
                          'pipeline': self.pipeline,
                          'logger': self.logger,
                          'global_step': self.global_step}
-        # metrics.visualization_task(**metric_params)
-        metrics.prediction_task(**metric_params)
-        
+        metrics.visualization_task(**metric_params)
+        # metrics.outcomization_task(**metric_params)
+        # metrics.prediction_task(**metric_params)
+        # metrics.trajectorization_task(**metric_params)
+        # metrics.hierachization_task(**metric_params)
+            
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader
         """
@@ -146,7 +150,7 @@ class PytorchLightningWrapper(pl.LightningModule):
                           batch_size=None,  # batch_size is set by pipeline
                           num_workers=RUN_PARAMS['num_workers'],
                           pin_memory=RUN_PARAMS['pin_memory'])
-
+        
     def train_dataloader(self):
         """ Return the training dataloader
         """
@@ -156,7 +160,7 @@ class PytorchLightningWrapper(pl.LightningModule):
         """ Return the validation dataloader
         """
         return self.get_dataloaders('val', shuffle=False)
-
+    
     def test_dataloader(self):
         """ Return the testing dataloader
         """

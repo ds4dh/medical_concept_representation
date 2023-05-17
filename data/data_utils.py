@@ -1,6 +1,7 @@
 import json
 import torch
 import random
+import numpy as np
 from functools import partial
 from itertools import zip_longest
 from torchdata.datapipes.iter import (
@@ -38,6 +39,36 @@ class JsonReader(IterDataPipe):
         return split in filename
 
 
+class MimicSubsampler(IterDataPipe):
+    def __init__(self, dp):
+        super().__init__()
+        self.dp = dp
+        self.subsample_dict = {
+            'LBL_ALIVE-LBL_AWAY-LBL_SHORT': 1.0 / 235.4,
+            'LBL_ALIVE-LBL_AWAY-LBL_LONG': 1.0 / 38.45,
+            'LBL_ALIVE-LBL_READM-LBL_SHORT': 1.0 / 54.44,
+            'LBL_ALIVE-LBL_LONG-LBL_READM': 1.0 / 14.22,
+            'LBL_AWAY-LBL_DEAD-LBL_SHORT': 1.0 / 7.046,
+            'LBL_AWAY-LBL_DEAD-LBL_LONG': 1.0 / 5.563,
+            'LBL_DEAD-LBL_READM-LBL_SHORT': 1.0 / 1.658,
+            'LBL_DEAD-LBL_LONG-LBL_READM': 1.0 / 1.000,
+        }
+        
+    def __iter__(self):
+        """ Subsample sequences, based on the label they contain
+        """
+        for sample in self.dp:
+            if self.subsample_fn(sample):
+                yield sample
+    
+    def subsample_fn(self, sample):
+        """ Retrieve subsampling probability, based on the sample content
+        """
+        sample_key = '-'.join(sorted([t for t in sample if 'LBL_' in t]))
+        sample_prob = self.subsample_dict[sample_key]
+        return random.random() < sample_prob
+
+
 class Encoder(IterDataPipe):
     """ Encode lists of words to lists of tokens or ngrams with a tokenizer 
     """
@@ -68,13 +99,15 @@ class Encoder(IterDataPipe):
     
 
 class TokenFilter(IterDataPipe):
-    def __init__(self, dp, to_remove=[], to_split=[]):
-        """ Clean samples with token filters and/or split by matching tokens
+    def __init__(self, dp, to_remove=[], to_reinsert=[], to_split=[]):
+        """ Clean samples with token filters and/or split by matching tokens.
+            Splits can be returned separately or inserted at random positions.
         """
         super().__init__()
         self.dp = dp
         self.to_remove = to_remove
         self.to_split = to_split
+        self.to_reinsert = to_reinsert
         
     def __iter__(self):
         for sample in self.dp:
@@ -83,20 +116,47 @@ class TokenFilter(IterDataPipe):
                        else self.filter_fn(sample[k]) for k in sample.keys()}
             else:
                 yield self.filter_fn(sample)
-                
+                         
     def filter_fn(self, sample):
         """ Filter out tokens that contains tokens to remove and, if required,
             split the sample by matching split tokens
         """
-        sample = [w for w in sample if not any(s in w for s in self.to_remove)]
-        if len(self.to_split) == 0:
+        sample = self.remove_fn(sample, self.to_remove)
+        sample = self.reinsert_fn(sample, self.to_reinsert)
+        sample = self.split_fn(sample, self.to_split)
+        return sample
+    
+    def reinsert_fn(self, sample, condition=[]):
+        """ Take out tokens that meet the to_insert condition and insert them
+            back at random positions of the new sample
+        """
+        if len(condition) == 0:
             return sample
-        else:
-            return (
-                [w for w in sample if not any(s in w for s in self.to_split)],
-                [w for w in sample if any(s in w for s in self.to_split)],
+        sample, reinserted = self.split_fn(sample, condition)
+        insert_bounds = np.arange(len(sample), len(sample) + len(reinserted))
+        insert_locs = np.random.randint(insert_bounds)
+        for token, loc in zip(reinserted, insert_locs):
+            sample.insert(loc, token)
+        return sample
+    
+    @staticmethod
+    def remove_fn(sample, condition):
+        """ Remove tokens that meet the to_remove condition from a sample
+        """
+        return [w for w in sample if not any(s in w for s in condition)]
+    
+    @staticmethod
+    def split_fn(sample, condition=[]):
+        """ Split tokens that meet the to_split condition and return the new
+            sample and the split tokens separately
+        """
+        if len(condition) == 0:
+            return sample
+        return (
+                [w for w in sample if not any(s in w for s in condition)],
+                [w for w in sample if any(s in w for s in condition)],
             )
-            
+        
 
 class TokenShuffler(IterDataPipe):
     """ Shuffle tokens inside sample sequences with some probability

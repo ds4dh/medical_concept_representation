@@ -9,167 +9,48 @@ BASE_CONFIG_PATH = os.path.join(CONFIG_DIR, 'base_config.toml')
 RUN_CONFIG_PATH = os.path.join(CONFIG_DIR, 'run_config.toml')
 PARAM_SETS = [
 
-    # {   'exp_id': "'whole_shuffle'",
-    #     'gpu_index': "2",
-    #     'token_shuffle_mode': "'whole'",
-    #     'token_shuffle_prob': "0.5",
-    #     'model_used': "'word2vec'",
-    #     'ngram_mode': "'word'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'word2vec.d_embed': '512',
-    #     'word2vec.n_neg_samples': '0',  # softmax
-    # },
-    # {   'exp_id': "'whole_shuffle'",
-    #     'gpu_index': "2",
-    #     'token_shuffle_mode': "'whole'",
-    #     'token_shuffle_prob': "0.5",
-    #     'model_used': "'fasttext'",
-    #     'ngram_mode': "'subword'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'fasttext.d_embed': '512',
-    #     'fasttext.n_neg_samples': '0',  # softmax
-    # },
-    {   'exp_id': "'whole_shuffle'",
-        'gpu_index': "2",
-        'token_shuffle_mode': "'whole'",
-        'token_shuffle_prob': "0.5",
-        'model_used': "'glove'",
-        'ngram_mode': "'word'",
-        'n_steps': '300_000',
-        'optimizer': "'hyper-1'",
-        'hyper_lr': '0.000001',
-        'lr': '0.0001',
-        'glove.d_embed': '512',
-    },
-
-
-
-    # {   'exp_id': "'partial_shuffle'",
-    #     'gpu_index': "1",
-    #     'token_shuffle_mode': "'partial'",
-    #     'token_shuffle_prob': "0.5",
-    #     'model_used': "'word2vec'",
-    #     'ngram_mode': "'word'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'word2vec.d_embed': '512',
-    #     'word2vec.n_neg_samples': '0',  # softmax
-    # },
-    # {   'exp_id': "'partial_shuffle'",
-    #     'gpu_index': "1",
-    #     'token_shuffle_mode': "'partial'",
-    #     'token_shuffle_prob': "0.5",
-    #     'model_used': "'fasttext'",
-    #     'ngram_mode': "'subword'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'fasttext.d_embed': '512',
-    #     'fasttext.n_neg_samples': '0',  # softmax
-    # },
-    {   'exp_id': "'partial_shuffle'",
+    {   'log_dir': "'logs_04_03'",
+        'exp_id': "'full_whole05_shuffle'",
         'gpu_index': "1",
-        'token_shuffle_mode': "'partial'",
-        'token_shuffle_prob': "0.5",
-        'model_used': "'glove'",
-        'ngram_mode': "'word'",
-        'n_steps': '300_000',
-        'optimizer': "'hyper-1'",
-        'hyper_lr': '0.000001',
-        'lr': '0.0001',
-        'glove.d_embed': '512',
-    },
-
-
-
-    # {   'exp_id': "'full_shuffle'",
-    #     'gpu_index': "2",
-    #     'token_shuffle_mode': "'whole'",
-    #     'token_shuffle_prob': "1.0",
-    #     'model_used': "'word2vec'",
-    #     'ngram_mode': "'word'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'word2vec.d_embed': '512',
-    #     'word2vec.n_neg_samples': '0',  # softmax
-    # },
-    # {   'exp_id': "'full_shuffle'",
-    #     'gpu_index': "2",
-    #     'token_shuffle_mode': "'whole'",
-    #     'token_shuffle_prob': "1.0",
-    #     'model_used': "'fasttext'",
-    #     'ngram_mode': "'subword'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'fasttext.d_embed': '512',
-    #     'fasttext.n_neg_samples': '0',  # softmax
-    # },
-    {   'exp_id': "'full_shuffle'",
-        'gpu_index': "2",
+        'data_subdir': "'datasets_full'",
         'token_shuffle_mode': "'whole'",
-        'token_shuffle_prob': "1.0",
-        'model_used': "'glove'",
-        'ngram_mode': "'word'",
-        'n_steps': '300_000',
+        'token_shuffle_prob': "0.5",
+        'model_used': "'fasttext'",
+        'ngram_mode': "'subword'",
+        'n_steps': '100_000',
         'optimizer': "'hyper-1'",
-        'hyper_lr': '0.000001',
-        'lr': '0.0001',
-        'glove.d_embed': '512',
+        'hyper_lr': '0.00001',
+        'lr': '0.001',
+        'fasttext.use_fixed_context': 'false',
     },
-
-
-
-    # {   'exp_id': "'no_shuffle'",
-    #     'gpu_index': "3",
-    #     'token_shuffle_mode': "'partial'",
-    #     'token_shuffle_prob': "0.0",
+    # {   'log_dir': "'logs_04_03'",
+    #     'exp_id': "'full_whole05_shuffle'",
+    #     'gpu_index': "2",
+    #     'data_subdir': "'datasets_full'",
+    #     'token_shuffle_mode': "'whole'",
+    #     'token_shuffle_prob': "0.5",
     #     'model_used': "'word2vec'",
     #     'ngram_mode': "'word'",
     #     'n_steps': '100_000',
     #     'optimizer': "'hyper-1'",
     #     'hyper_lr': '0.00001',
     #     'lr': '0.001',
-    #     'word2vec.d_embed': '512',
-    #     'word2vec.n_neg_samples': '0',  # softmax
+    #     'word2vec.use_fixed_context': 'false',
     # },
-    # {   'exp_id': "'no_shuffle'",
+    # {   'log_dir': "'logs_04_03'",
+    #     'exp_id': "'full_whole05_shuffle'",
     #     'gpu_index': "3",
-    #     'token_shuffle_mode': "'partial'",
-    #     'token_shuffle_prob': "0.0",
-    #     'model_used': "'fasttext'",
-    #     'ngram_mode': "'subword'",
-    #     'n_steps': '100_000',
-    #     'optimizer': "'hyper-1'",
-    #     'hyper_lr': '0.00001',
-    #     'lr': '0.001',
-    #     'fasttext.d_embed': '512',
-    #     'fasttext.n_neg_samples': '0',  # softmax
+    #     'data_subdir': "'datasets_full'",
+    #     'token_shuffle_mode': "'whole'",
+    #     'token_shuffle_prob': "0.5",
+    #     'model_used': "'glove'",
+    #     'ngram_mode': "'word'",
+    #     'n_steps': '300_000',
+    #     'n_sched_steps': '300_000',
+    #     'optimizer': "'adamw'",
+    #     'lr': '0.005',
+    #     'glove.use_fixed_context': 'false',
     # },
-    {   'exp_id': "'no_shuffle'",
-        'gpu_index': "3",
-        'token_shuffle_mode': "'partial'",
-        'token_shuffle_prob': "0.0",
-        'model_used': "'glove'",
-        'ngram_mode': "'word'",
-        'n_steps': '300_000',
-        'optimizer': "'hyper-1'",
-        'hyper_lr': '0.000001',
-        'lr': '0.0001',
-        'glove.d_embed': '512',
-    },
 
 ]
 
@@ -198,7 +79,7 @@ def update_field_value(config_lines: list[str],
                        ) -> list[str]:
     field_line_index, field_line = identify_field_line(config_lines,
                                                        field_to_update)
-    to_replace = field_line.split(' = ')[1]
+    to_replace = ' = '.join(field_line.split(' = ')[1:])
     new_field_line = field_line.replace(to_replace, new_value + '\n')
     config_lines[field_line_index] = new_field_line
     return config_lines
@@ -211,7 +92,7 @@ def identify_field_line(config_lines: list[str],
     if '.' in field_to_update:
         model, field_to_update = field_to_update.split('.')
         field_line_indices = [i for i, l in enumerate(config_lines)
-                              if field_to_update in l]
+                              if field_to_update + ' = ' in l]
         model_line_index = [i for i, l in enumerate(config_lines)
                             if '[models.%s' % model in l][0]
         field_line_index = min([l for l in field_line_indices
@@ -220,7 +101,7 @@ def identify_field_line(config_lines: list[str],
     # Case for general parameter updated
     else:
         return [(i, l) for i, l in enumerate(config_lines)
-                if field_to_update in l.split('#')[0]][0]
+                if field_to_update + ' = ' in l.split('#')[0]][0]
 
 
 if __name__ == '__main__':

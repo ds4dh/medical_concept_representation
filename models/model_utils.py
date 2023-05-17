@@ -57,6 +57,7 @@ def load_model_and_params_from_config(config_path: str):
 
 
 def load_checkpoint(model_name: str,
+                    log_dir: str,
                     exp_id: str,
                     model_version: int,
                     load_model: bool,
@@ -64,7 +65,7 @@ def load_checkpoint(model_name: str,
     """ Try to find a checkpoint path for the model from the log directory.
         If no checkpoint is found, None is returned (start from scratch).
     """
-    log_dir = os.path.join('logs', exp_id)
+    log_dir = os.path.join(log_dir, exp_id)
     model_dir = os.path.join(log_dir, model_name, f'version_{model_version}')
     if load_model:
         ckpt_path = find_existing_checkpoint(model_dir)
@@ -125,7 +126,7 @@ def update_and_save_config(config_path: str,
     """
     # Find config paths
     old_config_path = config_path
-    new_config_path = os.path.join('logs',
+    new_config_path = os.path.join(run_params['log_dir'],
                                    run_params['exp_id'],
                                    model_name,
                                    'version_%s' % new_model_version,

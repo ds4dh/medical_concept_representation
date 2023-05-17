@@ -3,7 +3,6 @@ import pickle
 import data
 import data.tasks as tasks
 import torchdata.datapipes.iter
-from typing import Union
 
 
 class DataPipeline():
@@ -20,6 +19,7 @@ class DataPipeline():
                                          data_params['data_subdir'])
         self.max_seq_len = data_params['max_seq_len']
         self.debug = run_params['debug']  # smaller dataset for training
+        self.data_params = data_params
         self.model_params = model_params
         self.run_params = run_params
 
@@ -44,7 +44,11 @@ class DataPipeline():
         
         # Build task-specific pipeline
         dp = data.JsonReader(self.data_fulldir, split)
-        dp = data.TokenFilter(dp, self.run_params['ngrams_to_remove'])
+        if self.data_params['subsample_mimic']:
+            dp = data.MimicSubsampler(dp)
+        dp = data.TokenFilter(dp,
+                              self.run_params['ngrams_to_remove'],
+                              self.run_params['ngrams_to_reinsert'])
         dp = data.Encoder(dp, self.tokenizer)
         dp = data.TokenShuffler(dp,
                                 self.run_params['token_shuffle_prob'],
@@ -62,12 +66,10 @@ class DataPipeline():
         """ Set the pipeline specific to the task of the model
         """
         if task == 'skipgram':
-            n_neg_samples = self.model_params['n_neg_samples']
-            return tasks.SkipGramMaker(dp, self.tokenizer, n_neg_samples)
+            return tasks.SkipGramMaker(dp, self.tokenizer, self.model_params)
         elif task == 'cooc':
-            load_cooc_data = self.model_params['load_cooc_data']
             return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir,
-                                   split, load_cooc_data)
+                                   split, self.model_params)
         elif task in ['lm', 'mt', 'reagent_pred_mt']:
             return tasks.LMSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
@@ -88,17 +90,22 @@ class DataPipeline():
         tokenizer = self.initialize_tokenizer()
         
         # Try to load the tokenizer, only if wanted, and return it if found
-        print(' - Loading tokenizer from %s' % tokenizer.path)
-        try:
-            with open(tokenizer.path, 'rb') as tokenizer_file:
-                tokenizer = pickle.load(tokenizer_file)
-                print(' - Loaded tokenizer - voc: %s'  % tokenizer.vocab_sizes)
-                return tokenizer
-        except:
-            print(' - Tokenizer not found, retraining it')
+        if self.run_params['load_tokenizer']:
+            print(' - Loading tokenizer from %s' % tokenizer.path)
+            try:
+                with open(tokenizer.path, 'rb') as tokenizer_file:
+                    tokenizer = pickle.load(tokenizer_file)
+                    print(' - Loaded tokenizer - voc: %s'  %\
+                          tokenizer.vocab_sizes)
+                    return tokenizer
+            except:
+                print(' - Tokenizer not found, retraining it')
         
         # If tokenizer was not loaded, train the tokenizer using train dataset
+        print(' - Training tokenizer using the training dataset')
         dp = data.JsonReader(self.data_fulldir, 'train')
+        # if self.data_params['subsample_mimic']:  # didn't worke well with this
+        #     dp = data.MimicSubsampler(dp)        # didn't worke well with this
         dp = data.TokenFilter(dp, self.run_params['ngrams_to_remove'])
         list_with_all_data = [token for sentence in dp for token in sentence]
         tokenizer.fit(list_with_all_data)

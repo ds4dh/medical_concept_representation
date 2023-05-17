@@ -223,13 +223,13 @@ class SubWordTokenizer():
             
         # Encode the word and the ngram
         indices = []
-        for word_or_ngram in seq:  # first in the list is the word itself
+        for i, word_or_ngram in enumerate(seq):  # first in list is word itself
             try:
                 indices.append(self.encoder[word_or_ngram])
-            except:  # this will still take the ngrams for an unknown word
-                indices.append(self.encoder['[UNK]'])
+            except:  # add unkown token only for word, not for ngram
+                if i == 0: indices.append(self.encoder['[UNK]'])
         return indices
-
+    
     def decode(self, token_id_or_ids):
         """ Decode a token or a list of tokens.
             - If the input is a list of tokens, this means that the first token

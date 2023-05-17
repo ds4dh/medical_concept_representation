@@ -1,5 +1,6 @@
 [run]
-  exp_id = 'new_dataset'  # choose the subfolder in ./logs that will be created
+  log_dir = 'logs'
+  exp_id = 'test'  # choose the subfolder in ./logs that will be created
   model_used = 'word2vec'  # 'word2vec', 'fasttext', 'glove', 'elmo', 'bert', 'fnet'
   model_version = 0  # will increase to avoid overwriting until version is unique
   gpu_index = 0  # for now, only single gpu is used
@@ -8,20 +9,22 @@
   ngram_mode = 'word'  # 'word', 'subword', 'icd'
   ngram_min_len = 2  # only used for ngram_mode == 'subword'; must be > 0
   ngram_max_len = 5  # only used for ngram_mode == 'subword'; must be >= ngram_min_len
-  ngram_base_prefixes = ['DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
+  ngram_base_prefixes = ['LBL_', 'DEM_', 'LOC_', 'LAB_', 'MED_', 'PRO_', 'DIA_']  # only used for ngram_mode != 'word'
   ngram_base_suffixes = []  # [':OK', ':AB']  # only used for ngram_mode != 'word'
-  ngrams_to_remove = ['SUB_', 'ADM_']  # remove all token that contain any of these flags
+  ngrams_to_remove = ['SUB_', 'ADM_']  # remove all tokens that contain any of these flags
+  ngrams_to_reinsert = ['LBL_', 'DEM_']  # move all tokens that contain any of these flags at random positions
   debug = false  # if true, will use the smaller validation data as the training data
   load_model = false  # note: changing ngram_len will change embedding layer
-  load_tokenizer = false
+  load_tokenizer = true
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
-  data_dir = './data/datasets/mimic-iv-2.2'  # './data/datasets/autophe'
-  data_subdir = 'datasets'  # 'time_categorized_atc'  # time_categorized, time_categorized_atc, time_not_categorized
+  data_dir = './data/datasets/mimic-iv-2.2'
+  data_subdir = 'datasets_unique'
   log_dir = './logs'
   max_seq_len = 512
+  subsample_mimic = false
 
 [train]
   optimizer = 'hyper'  # 'adam', 'radam', 'adamw', 'hyper'
@@ -34,18 +37,20 @@
   accumulate_grad_batches = 1  # number of steps over which gradient is accumulated
   max_tokens_per_batch = 4_096  # 4_096  # 16_384  # 65_536
   n_epochs = 0  # total training epochs: if n_epochs set to 0, n_steps will be used
-  n_steps = 300_000  # total training steps: only used if n_epochs is set to 0
+  n_steps = 100_000  # total training steps: only used if n_epochs is set to 0
   n_steps_check_val = 10_000  # how many training steps between each validation
   n_sched_steps = 100_000  # (not used if optimizer = 'hyper')
-  n_sched_warmup_steps = 1_000  # (not used if optimizer = 'hyper')
+  n_sched_warmup_steps = 10_000  # (not used if optimizer = 'hyper')
 
 [models]
   [models.word2vec]
     task = 'skipgram'  # todo: implement bow
     input_keys = ['pos_center', 'pos_context', 'neg_context']
     label_keys = []
-    n_neg_samples = 15  # 0 for using softmax over all vocab tokens
-    d_embed = 256
+    n_neg_samples = 0  # 0 for using softmax over all vocab tokens
+    use_fixed_context = false
+    max_context_size = 5
+    d_embed = 512
     [models.word2vec.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -54,8 +59,10 @@
     task = 'skipgram'  # todo: implement bow
     input_keys = ['pos_center', 'pos_context', 'neg_context']
     label_keys = []
-    n_neg_samples = 15  # 0 for using softmax over all vocab tokens
-    d_embed = 256
+    n_neg_samples = 0  # 0 for using softmax over all vocab tokens
+    use_fixed_context = false
+    max_context_size = 5
+    d_embed = 512
     [models.fasttext.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -64,8 +71,12 @@
     task = 'cooc'
     input_keys = ['left', 'right']
     label_keys = ['cooc']
-    load_cooc_data = true
-    d_embed = 16
+    load_cooc_data = true  # false
+    use_whole_sentence = true
+    use_fixed_context = false
+    left_context_size = 10
+    right_context_size = 10
+    d_embed = 512
     [models.glove.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1

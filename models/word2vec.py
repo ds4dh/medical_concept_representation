@@ -35,7 +35,7 @@ class SkipGram(nn.Module):
         # Assign input variables
         pos_center = input_dict['pos_center']
         pos_context = input_dict['pos_context']
-
+        
         # Softmax case
         if self.n_neg_samples == 0:
             pos_center = self.center_embeddings(pos_center)
