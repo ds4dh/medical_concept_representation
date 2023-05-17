@@ -1,0 +1,41 @@
+location,locationlabel
+Unknown,UNKNOWN
+Med/Surg/GYN,MED-SURG-GYN
+Surgical Intensive Care Unit (SICU),SURG-ICU
+Neuro Stepdown,NEURO-STEP
+Neurology,NEURO
+Coronary Care Unit (CCU),CORO-CU
+Medicine/Cardiology,MED-CARD
+Medical/Surgical Intensive Care Unit (MICU/SICU),MED-SURG-ICU
+Cardiology Surgery Intermediate,CARD-SURG-INTER
+Obstetrics Postpartum,PREG-POST
+PACU,ANEST-POST-CU
+Observation,OBS
+Medical Intensive Care Unit (MICU),MED-ICU
+nan,DISCH
+Medicine/Cardiology Intermediate,MED-CARD-INTER
+Emergency Department,ED
+Cardiac Vascular Intensive Care Unit (CVICU),CARD-VASC-CU
+Vascular,VASC
+Hematology/Oncology,HEMA-ONCO
+Neuro Intermediate,NEURO-INTER
+Med/Surg,MED-SURG
+Surgery,SURG
+Medicine,MED
+Hematology/Oncology Intermediate,HEMA-ONCO-INTER
+Psychiatry,PSYCH
+Emergency Department Observation,OBS-ED
+Obstetrics (Postpartum & Antepartum),PREG
+Surgery/Pancreatic/Biliary/Bariatric,SURG-PANCR
+Neuro Surgical Intensive Care Unit (Neuro SICU),NEURO-SURG-ICU
+Medical/Surgical (Gynecology),MED-SURG-GYN
+Discharge Lounge,DISCH-LNGE
+Labor & Delivery,PREG-LABOR
+Med/Surg/Trauma,MED-SURG-TRAUMA
+Cardiac Surgery,SURG-CARD
+Transplant,TRANS
+Thoracic Surgery,SURG-THORAX
+Surgery/Trauma,SURG-TRAUMA
+Cardiology,CARD
+Trauma SICU (TSICU),SURG-TRAUMA-ICU
+Obstetrics Antepartum,PREG-ANTE
