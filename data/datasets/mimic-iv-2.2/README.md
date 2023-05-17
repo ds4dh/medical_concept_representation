@@ -11,6 +11,4 @@ Once you have access to the files, you should upload them at the following locat
 
 You can then build the pre-processed datasets, using the following command:
 ```
-python data/datasets/mimic-iv-2.2/process_mimic.py
-
-```
+python data/datasets/mimic-iv-2.2/process_mimic.py```
