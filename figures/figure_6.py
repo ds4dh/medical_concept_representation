@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from scipy.stats import rankdata
 
-do_bis_figure = True
+do_bis_figure = False
 models = ['word2vec', 'fasttext', 'glove']
 model_titles = {'word2vec': 'word2vec', 'fasttext': 'fastText', 'glove': 'GloVe'}
 categories = ['DIA_', 'PRO_', 'MED_']
@@ -20,7 +20,7 @@ desc = {'LOS_': 'Length-of-stay', 'REA_': 'Readmission', 'MOR_': 'Mortality'}
 y_lims = {'LOS_': [0.0, 1.0], 'REA_': [0.0, 1.0], 'MOR_': [0.0, 1.0]}
 bar_specs = {'width': 0.12, 'edgecolor': 'black', 'linewidth': 0.7, 'zorder': 10}
 marker_specs = {'marker': 'o', 'markersize': 3}
-perf_colors = {'word2vec': 'tab:green', 'fasttext': 'tab:blue', 'glove': 'tab:pink'}
+perf_colors = {'word2vec': 'tab:green', 'fasttext': 'tab:blue', 'glove': 'tab:red'}
 rand_colors = {'auroc': 'k', 'auprc': 'k'}
 medal_colors = {1: 'goldenrod', 2: 'dimgrey', 3: 'firebrick'}
 perfs_rand = {
@@ -42,15 +42,15 @@ if not do_bis_figure:
     for i, (ax, cat) in enumerate(zip(axs, desc.keys())):
         p_rand = np.array(perfs_rand[cat]).mean(axis=0)
 
-        mean_perf = {}
-        for model, perfs in all_perfs.items():
-            mean_perf[model] = np.array(perfs[cat]).mean(axis=0)
-        medals = []
-        for i, x in enumerate(x_data):
-            mean_perfs = [mean_perf[m][i] for m in models]
-            ranks = len(mean_perfs) - rankdata(mean_perfs, method='ordinal') + 1
-            medals.append(ranks)
-        medals = {m: r for m, r in zip(models, zip(*medals))}
+        # mean_perf = {}
+        # for model, perfs in all_perfs.items():
+        #     mean_perf[model] = np.array(perfs[cat]).mean(axis=0)
+        # medals = []
+        # for i, x in enumerate(x_data):
+        #     mean_perfs = [mean_perf[m][i] for m in models]
+        #     ranks = len(mean_perfs) - rankdata(mean_perfs, method='ordinal') + 1
+        #     medals.append(ranks)
+        # medals = {m: r for m, r in zip(models, zip(*medals))}
 
         for j, (model, perfs) in enumerate(all_perfs.items()):
             for k, (perf, prt, a) in enumerate(zip(perfs[cat], partials, alphas)):
@@ -70,12 +70,12 @@ if not do_bis_figure:
             if j == 0: ax[j].set_ylabel('AUPRC - %s' % desc[cat], fontsize='large')
             if i == 0: ax[j].set_title(model_titles[model], fontsize='large')
             
-            for i, x in enumerate(x_data):
-                ax[j].get_xticklabels()[i].set_color(medal_colors[medals[model][i]])
-                ax[j].get_xticklabels()[i].set_fontweight('bold')
+            # for i, x in enumerate(x_data):
+            #     ax[j].get_xticklabels()[i].set_color(medal_colors[medals[model][i]])
+            #     ax[j].get_xticklabels()[i].set_fontweight('bold')
             
     plt.tight_layout()
-    plt.savefig('figure_6.png', dpi=300)
+    plt.savefig('figures/figure_6.png', dpi=300)
 
 else:
     bar_specs = {'width': 0.18, 'edgecolor': 'black', 'linewidth': 0.7, 'zorder': 10}
@@ -106,4 +106,4 @@ else:
             if i == 0: ax[j].set_title(desc[cat], fontsize='large')
             
     plt.tight_layout()
-    plt.savefig('figure_6.png', dpi=300)
+    plt.savefig('figures/figure_6_bis.png', dpi=300)

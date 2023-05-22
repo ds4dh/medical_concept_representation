@@ -22,7 +22,7 @@ y_lims = {
     # 'auprc': {'DIA_': [0.0, 0.25], 'PRO_': [0.0, 0.65], 'MED_': [0.0, 0.25]},
 }
 marker_specs = {'marker': 'o', 'markersize': 3}
-perf_colors = {'word2vec': 'tab:green', 'fasttext': 'tab:blue', 'glove': 'tab:pink'}
+perf_colors = {'word2vec': 'tab:green', 'fasttext': 'tab:blue', 'glove': 'tab:red'}
 rand_colors = {'auroc': 'k', 'auprc': 'k'}
 medal_colors = {1: 'goldenrod', 2: 'dimgrey', 3: 'firebrick'}
 
@@ -83,7 +83,7 @@ if not do_bis_figure:
                     ax[j].get_xticklabels()[i].set_fontweight('bold')
             
         plt.tight_layout()
-        plt.savefig('figure_9_%s.png' % measure, dpi=300)
+        plt.savefig('figures/figure_9_%s.png' % measure, dpi=300)
 
 else:
     for measure in ['auroc', 'auprc']:
@@ -104,4 +104,4 @@ else:
                     ax.set_title(desc[cat], fontsize='large')
 
         plt.tight_layout()
-        plt.savefig('figure_9_bis_%s.png' % measure, dpi=300)
+        plt.savefig('figures/figure_9_bis_%s.png' % measure, dpi=300)
