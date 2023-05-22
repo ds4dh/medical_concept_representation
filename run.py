@@ -133,10 +133,10 @@ class PytorchLightningWrapper(pl.LightningModule):
                          'logger': self.logger,
                          'global_step': self.global_step}
         metrics.visualization_task(**metric_params)
-        # metrics.outcomization_task(**metric_params)
-        # metrics.prediction_task(**metric_params)
-        # metrics.trajectorization_task(**metric_params)
-        # metrics.hierachization_task(**metric_params)
+        metrics.outcomization_task(**metric_params)
+        metrics.prediction_task(**metric_params)
+        metrics.trajectorization_task(**metric_params)
+        metrics.hierachization_task(**metric_params)
             
     def get_dataloaders(self, split, shuffle):
         """ Generic function to initialize and return a dataloader
