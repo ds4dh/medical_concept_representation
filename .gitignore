@@ -160,6 +160,9 @@ cython_debug/
 #.idea/
 
 # Custom
-logs/*
+logs*
 temp/*
+data/datasets/mimic-iv-2.2/datasets_full/*
+data/datasets/mimic-iv-2.2/hosp/*
 configs/run_config.toml
+figures/*.png
