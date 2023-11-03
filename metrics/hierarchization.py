@@ -39,11 +39,9 @@ TEXT_SIZE = 16
 N_ANNOTATED_SAMPLES = 60
 COLORS = (list(plt.cm.tab20(np.arange(20)[0::2])) +\
           list(plt.cm.tab20(np.arange(20)[1::2]))) * 10
-BLACK = (0.0, 0.0, 0.0)
 SCATTER_PARAMS = {'s': 50, 'linewidth': 0, 'alpha': 0.5}
 LEAF_SEPARATION = 0.3
 MIN_CLUSTER_SIZE = 6
-NA_VALUE = (0.0, 0.0, 0.0)  # unassigned data sample in hdscan
 NA_COLOR = np.array([0.0, 0.0, 0.0, 1.0])  # black (never a cluster color)
 
 
@@ -122,7 +120,7 @@ def plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx):
     ari_match = adjusted_rand_score(class_labels, cluster_labels)
     nmi_match = normalized_mutual_info_score(class_labels, cluster_labels)
     homog, compl, v_match = hcv_measure(class_labels, cluster_labels)
-    print(' - ari: %.3f\n - nmi: %.3f\n - hom: %.3f\n - comp: %.3f\n - v: %.3f'%
+    print(' - ari: %.5f\n - nmi: %.5f\n - hom: %.5f\n - comp: %.5f\n - v: %.5f'%
           (ari_match, nmi_match, homog, compl, v_match))
 
     # Visualize theoretical clusters (using, e.g., ICD10-CM code hierarchy)
@@ -139,7 +137,7 @@ def plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx):
         texts.append(axs[0, cat_idx].text(d[0], d[1], t, fontsize='xx-small'))
     arrowprops = dict(arrowstyle='->', color='k', lw=0.5)
     adjust_text(texts, x=data[:, 0], y=data[:, 1], ax=axs[0, cat_idx],
-                force_text=(0.2, 0.3), min_arrow_len=12, arrowprops=arrowprops)
+                force_text=(0.2, 0.3), arrowprops=arrowprops)
     
     # Visualize empirical clusters
     axs[1, cat_idx].scatter(*data.T, c=cluster_colors, **SCATTER_PARAMS)
@@ -203,7 +201,7 @@ def add_cluster_info(ax: plt.Axes,
     ax.set_ylim([top_lim, bottom_lim])
     
     # Retrieve colours and match then to the correct clusters
-    assigned_colors = [c for c in cluster_colors if c != (0.0, 0.0, 0.0)]
+    assigned_colors = [c for c in cluster_colors if not np.array_equal(c, NA_COLOR)]
     unique_colors = np.unique(assigned_colors, axis=0)
     sizes_from_colors = [len([ac for ac in assigned_colors if (ac == uc).all()])
                          for uc in unique_colors]
@@ -237,18 +235,15 @@ def align_cluster_colors(token_info, cluster_info):
     if len(unique_classes) >= len(unique_clusters):
         color_map = best_color_match(cluster_lbls, class_lbls, unique_clusters, unique_classes)
         color_map = {k: unique_classes.index(v) for k, v in color_map.items()}
-        cluster_colors = [COLORS[color_map[i]] if i >= 0 else BLACK for i in cluster_lbls]
+        cluster_colors = [COLORS[color_map[i]] if i >= 0 else NA_COLOR for i in cluster_lbls]
         class_colors = [COLORS[unique_classes.index(l)] for l in class_lbls]
     
     # In this case, empirical clusters define the maximum number of colours
     else:
         color_map = best_color_match(class_lbls, cluster_lbls, unique_classes, unique_clusters)
         color_map = {unique_classes.index(k): v for k, v in color_map.items()}
-        cluster_colors = [COLORS[i] if i >= 0 else BLACK for i in cluster_lbls]
+        cluster_colors = [COLORS[i] if i >= 0 else NA_COLOR for i in cluster_lbls]
         class_colors = [COLORS[color_map[unique_classes.index(l)]] for l in class_lbls]
-    
-    # Correct format of unassigned data samples
-    cluster_colors = [c if c != NA_VALUE else NA_COLOR for c in cluster_colors]
     
     # Return aligned empirical and theorical clusters
     return cluster_colors, class_colors
