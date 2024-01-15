@@ -1,16 +1,18 @@
 import torch
 import numpy as np
-import hdbscan
+import cuml.cluster.hdbscan as cuml_hdbscan  # import hdbscan
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import tempfile
 import data
 import pytorch_lightning as pl
-from PIL import Image
 from adjustText import adjust_text
-from hdbscan import flat
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+from hdbscan import flat  # only available in CPU version
+from cuml import PCA  # from sklearn.decomposition import PCA
+from cuml import TSNE  # from sklearn.manifold import TSNE
+from metrics.metric_utils import (
+    compute_reduced_representation,
+    log_figure_to_board,
+)
 from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import (
     adjusted_rand_score,
@@ -30,77 +32,61 @@ PLOT_CAT_MAP = {
     'PRO_': 'ICD10-PCS codes (B0 -> BY)',
     'MED_': 'ATC codes (L01 -> L04)',
 }
-DIMENSIONALITY_REDUCTION_ALGORITHM = 'tsne'  # 'pca', 'tsne'
-assert DIMENSIONALITY_REDUCTION_ALGORITHM in ('pca', 'tsne'),\
-    'Invalid algorithm for dimensionality reduction [pca, tsne]'
-REDUCED_DIMENSIONALITY = 2  # None for no dimensionality reduction
 FIG_SIZE = (15, 15)
 TEXT_SIZE = 16
 N_ANNOTATED_SAMPLES = 60
-COLORS = (list(plt.cm.tab20(np.arange(20)[0::2])) +\
-          list(plt.cm.tab20(np.arange(20)[1::2]))) * 10
+COLORS = (
+    list(plt.cm.tab20(np.arange(20)[0::2])) + \
+    list(plt.cm.tab20(np.arange(20)[1::2]))
+) * 10
 SCATTER_PARAMS = {'s': 50, 'linewidth': 0, 'alpha': 0.5}
 LEAF_SEPARATION = 0.3
 MIN_CLUSTER_SIZE = 6
 NA_COLOR = np.array([0.0, 0.0, 0.0, 1.0])  # black (never a cluster color)
 
 
-def hierachization_task(model: torch.nn.Module,
-                        pipeline: data.DataPipeline,
-                        logger: pl.loggers.tensorboard.TensorBoardLogger,
-                        global_step: int,
-                        ) -> None:
+def hierachization_task(
+    model: torch.nn.Module,
+    pipeline: data.DataPipeline,
+    logger: pl.loggers.Logger,
+    global_step: int,
+) -> None:
     """ Reduce the dimensionality of concept embeddings for different categories
         and log a scatter plot of the low-dimensional data to tensorboard
     """
     print('\nProceeding with hierarchization testing metric')
     fig, axs = plt.subplots(3, 3, figsize=FIG_SIZE)
     for cat_idx, cat in enumerate(CATEGORY_SUBLEVELS.keys()):
-        print('Clustering %s tokens (d=%s)' % (cat, REDUCED_DIMENSIONALITY))
+        print('Clustering tokens with reduced dimensionality (d=2)')
         token_info = get_token_info(model, pipeline.tokenizer, cat)
-        if REDUCED_DIMENSIONALITY != 2:
-            token_info['data'] = compute_reduced_representation(
-                token_info['embedded'],
-                dim=REDUCED_DIMENSIONALITY,
-                algorithm='pca',
-            )
-            cluster_info = get_cluster_info(token_info)
-            if cluster_info == None: continue
-            token_info['data'] = compute_reduced_representation(
-                token_info['data'],
-                dim=2,
-                algorithm=DIMENSIONALITY_REDUCTION_ALGORITHM,
-            )
-            plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx)
-        else:
-            data = compute_reduced_representation(
-                token_info['embedded'],
-                dim=REDUCED_DIMENSIONALITY,
-                algorithm=DIMENSIONALITY_REDUCTION_ALGORITHM,
-            )
-            token_info['data'] = data
-            cluster_info = get_cluster_info(token_info)
-            if cluster_info == None: continue
-            plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx)
+        data = compute_reduced_representation(token_info['embedded'])
+        token_info['data'] = data
+        cluster_info = get_cluster_info(token_info)
+        if cluster_info == None: continue
+        plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx)
         
     plt.tight_layout()
-    log_figure_to_tensorboard(fig, 'hierarchization_metric', logger, global_step)
+    log_figure_to_board(fig, 'hierarchization_metric', logger, global_step)
     
 
 def get_cluster_info(token_info, fixed_n_clusters=True):
     """ ...
     """
     # Find cluster affordances based on cluster hierarchy
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=MIN_CLUSTER_SIZE)
+    clusterer = cuml_hdbscan.HDBSCAN(min_cluster_size=MIN_CLUSTER_SIZE)
     clusterer.fit(token_info['data'])
     unique_classes = sorted(list(set(token_info['class_lbls'])))
     if fixed_n_clusters:
         try:
-            n_clusters = len([c for c in unique_classes
-                              if token_info['class_lbls'].count(c) > MIN_CLUSTER_SIZE])
-            clusterer = flat.HDBSCAN_flat(token_info['data'],
-                                        n_clusters=n_clusters,
-                                        clusterer=clusterer)
+            n_clusters = len([
+                c for c in unique_classes
+                if token_info['class_lbls'].count(c) > MIN_CLUSTER_SIZE
+            ])
+            clusterer = flat.HDBSCAN_flat(
+                token_info['data'],
+                n_clusters=n_clusters,
+                clusterer=clusterer
+            )
         except IndexError:
             print(' - Clustering algorithm did not converge!')
             return None
@@ -167,10 +153,12 @@ def plot_hierarchy(token_info, cluster_info, axs, cat, cat_idx):
     if cat_idx > 0: axs[2, cat_idx].set_ylabel('', fontsize=TEXT_SIZE)
 
 
-def add_cluster_info(ax: plt.Axes,
-                     clusterer: hdbscan.HDBSCAN,
-                     n_clusters: int,
-                     cluster_colors: list[np.ndarray]):
+def add_cluster_info(
+    ax: plt.Axes,
+    clusterer: cuml_hdbscan.HDBSCAN,
+    n_clusters: int,
+    cluster_colors: list[np.ndarray]
+) -> None:
     """ ...
     """
     # Select the branches that will be highlighted (empirical clusters)
@@ -203,10 +191,12 @@ def add_cluster_info(ax: plt.Axes,
     # Retrieve colours and match then to the correct clusters
     assigned_colors = [c for c in cluster_colors if not np.array_equal(c, NA_COLOR)]
     unique_colors = np.unique(assigned_colors, axis=0)
-    sizes_from_colors = [len([ac for ac in assigned_colors if (ac == uc).all()])
-                         for uc in unique_colors]
-    sizes_from_tree = [int(cluster_bounds[b][1] - cluster_bounds[b][0])
-                       for b in selected_branches]
+    sizes_from_colors = [
+        len([ac for ac in assigned_colors if (ac == uc).all()]) for uc in unique_colors
+    ]
+    sizes_from_tree = [
+        int(cluster_bounds[b][1] - cluster_bounds[b][0]) for b in selected_branches
+    ]
     match_indices = [sizes_from_colors.index(v) for v in sizes_from_tree]
     unique_colors = unique_colors[match_indices]
     
@@ -267,29 +257,6 @@ def compute_labels(cluster_colors, class_colors):
     return cluster_labels, class_labels
 
 
-def compute_reduced_representation(embeddings: np.ndarray,
-                                   dim='2',
-                                   algorithm='pca'
-                                   ) -> np.ndarray:
-    """ Reduce the dimensionality of high-dimensional concept embeddings
-    """
-    if dim is None:
-        return embeddings
-    if algorithm == 'pca':
-        return PCA().fit_transform(embeddings)[:, :dim]
-    elif algorithm == 'tsne':
-        params = {
-            'perplexity': 30.0,
-            'learning_rate': 'auto',  # or any value in [10 -> 1000] may be good
-            'n_iter': 10000,
-            'n_iter_without_progress': 1000,
-            'metric': 'cosine',
-            'init': 'pca',
-            'n_jobs': 20,
-        }
-        return TSNE(dim, **params).fit_transform(embeddings)
-
-
 def get_token_info(model: torch.nn.Module,
                    tokenizer: data.tokenizers.Tokenizer,
                    category: str
@@ -335,16 +302,3 @@ def best_color_match(src_lbls, tgt_lbls, unique_src_lbls, unique_tgt_lbls):
     
     rows, cols = linear_sum_assignment(cost_matrix)
     return {unique_src_lbls[i]: unique_tgt_lbls[j] for i, j in zip(rows, cols)}
-
-
-def log_figure_to_tensorboard(fig: plt.Figure,
-                              fig_title: str,
-                              logger: pl.loggers.tensorboard.TensorBoardLogger,
-                              global_step: int
-                              ) -> None:
-    """ Log the outcomization plot to tensorboard as an image stream
-    """
-    temp_file_name = tempfile.NamedTemporaryFile(suffix='.png').name
-    fig.savefig(temp_file_name, dpi=300, bbox_inches='tight')  
-    image = np.asarray(Image.open(temp_file_name)).transpose(2, 0, 1)
-    logger.experiment.add_image(fig_title, image, global_step=global_step)

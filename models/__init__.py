@@ -7,8 +7,8 @@ from .fnet import FNet
 from .bert_classifier import BERTClassifier
 from .model_utils import (
     load_model_and_params_from_config,
-    load_checkpoint,
-    update_and_save_config,
+    # load_checkpoint,
+    # update_and_save_config,
     set_environment
 )
 

@@ -11,70 +11,76 @@ from pytorch_lightning.callbacks import (
 
 def select_optimizer(model, train_params):
     # Hyper-(hyper-)optimization with gdtuo python package
-    if 'hyper' in train_params['optimizer']:
-        # Select hyper optimization given tower level (e.g., 2 for 'hyper-2')
+    if "hyper" in train_params["optimizer"]:
+        # Select hyper optimization given tower level (e.g., 2 for "hyper-2")
         hyper_optim = gdtuo.NoOpOptimizer()
-        hyper_level = int(train_params['optimizer'].split('hyper-')[-1])
-        hyper_lr = train_params['hyper_lr'] / (10 ** hyper_level)
+        hyper_level = int(train_params["optimizer"].split("hyper-")[-1])
+        hyper_lr = train_params["hyper_lr"] / (10 ** hyper_level)
         for _ in range(hyper_level):
             hyper_lr *= 10
             hyper_optim = gdtuo.AdamBaydin(alpha=hyper_lr,
                                            optimizer=hyper_optim)
         
         # Build model optimizer wrapped into hyper-optimization pipeline
-        optim = gdtuo.Adam(alpha=train_params['lr'], optimizer=hyper_optim)
+        optim = gdtuo.Adam(alpha=train_params["lr"], optimizer=hyper_optim)
         hyper_optim_wrapper = gdtuo.ModuleWrapper(model, optimizer=optim)
         hyper_optim_wrapper.initialize()
         dummy_optim = torch.optim.Adam([torch.empty(0)])
         return hyper_optim_wrapper, dummy_optim
 
     # Classic optimization
-    optim_params = {'params': model.parameters(),
-                    'lr': train_params['lr'],
-                    'betas': train_params['betas'],
-                    'weight_decay': train_params['weight_decay']}
-    if train_params['optimizer'] == 'adam':
+    optim_params = {"params": model.parameters(),
+                    "lr": train_params["lr"],
+                    "betas": train_params["betas"],
+                    "weight_decay": train_params["weight_decay"]}
+    if train_params["optimizer"] == "adam":
         optim_fn = torch.optim.Adam
-    elif train_params ['optimizer'] == 'radam':
+    elif train_params ["optimizer"] == "radam":
         optim_fn = torch.optim.RAdam
-    elif train_params['optimizer'] == 'adamw':
+    elif train_params["optimizer"] == "adamw":
         optim_fn = torch.optim.AdamW
     else:
-        raise ValueError('Invalid optimizer given to the pipeline.')
+        raise ValueError("Invalid optimizer given to the pipeline.")
     return optim_fn(**optim_params)
 
 
 def select_scheduler(optimizer, train_params):
-    sched_params = {'optimizer': optimizer,
-                    'n_warmup_steps': train_params['n_sched_warmup_steps']}
-    if train_params['scheduler'] == 'noam':
+    sched_params = {"optimizer": optimizer,
+                    "n_warmup_steps": train_params["n_sched_warmup_steps"]}
+    if train_params["scheduler"] == "noam":
         sched_fn = NoamSchedulerWithWarmup
-    elif train_params['scheduler'] == 'linear':
+    elif train_params["scheduler"] == "linear":
         sched_fn = LinearSchedulerWithWarmup
-        sched_params.update({'n_steps': train_params['n_sched_steps']})
-    elif train_params['scheduler'] == 'onecycle':
+        sched_params.update({"n_steps": train_params["n_sched_steps"]})
+    elif train_params["scheduler"] == "onecycle":
         return OneCycleLR(optimizer=optimizer,
-                          max_lr=train_params['lr'],
-                          total_steps=train_params['n_sched_steps'],
+                          max_lr=train_params["lr"],
+                          total_steps=train_params["n_sched_steps"],
                           pct_start=0.05)
     else:
-        raise ValueError('Invalid scheduler given to the pipeline.')
+        raise ValueError("Invalid scheduler given to the pipeline.")
     return sched_fn(**sched_params)
 
 
-def select_callbacks(train_params):
-    callbacks = [ModelCheckpoint(every_n_train_steps=100)]
-    if train_params['early_stopping_patience'] > 0:
-        callbacks.append(EarlyStopping(
-            monitor='loss/val',
-            patience=train_params['early_stopping_patience']))
-    if train_params['optimizer'] != 'hyper':
-        callbacks.extend([LearningRateMonitor(logging_interval='step')])
+def select_callbacks(train_params, monitored="loss/train"):
+    # callbacks = [ModelCheckpoint(
+    #     monitor=monitored, mode="min", save_top_k=1, every_n_train_steps=100,
+    # )]
+    callbacks = [ModelCheckpoint()]
+    if train_params["early_stopping_patience"] > 0:
+        callbacks.append(
+            EarlyStopping(
+                monitor=monitored,
+                patience=train_params["early_stopping_patience"],
+            )
+        )
+    if train_params["optimizer"] != "hyper":
+        callbacks.extend([LearningRateMonitor(logging_interval="step")])
     return callbacks
 
 
 class NoamSchedulerWithWarmup(_LRScheduler):
-    ''' Initialize the NoamLRLambda scheduler.
+    """ Initialize the NoamLRLambda scheduler.
         
         :param d_model: size of hidden model dimension
         :param factor: multiplicative factor
@@ -82,16 +88,16 @@ class NoamSchedulerWithWarmup(_LRScheduler):
         :param last_epoch: index of last epoch
         :param verbose: print logs
 
-    '''
+    """
     def __init__(self, optimizer, n_warmup_steps=10000):
         self.n_warmup_steps = n_warmup_steps
-        self.init_lrs = [group['lr'] for group in optimizer.param_groups]
+        self.init_lrs = [group["lr"] for group in optimizer.param_groups]
         super(NoamSchedulerWithWarmup, self).__init__(optimizer)
 
     def get_lr(self):
         if not self._get_lr_called_within_step:
-            warnings.warn('To get the last learning rate computed by the \
-                          scheduler, please use get_last_lr().', UserWarning)
+            warnings.warn("To get the last learning rate computed by the \
+                          scheduler, please use get_last_lr().", UserWarning)
         return self._get_lr_fn(self.init_lrs)
 
     def _get_closed_form_lr(self):

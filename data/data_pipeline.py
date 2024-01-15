@@ -6,17 +6,19 @@ import torchdata.datapipes.iter
 
 
 class DataPipeline():
-    def __init__(self,
-                 data_params: dict,
-                 run_params: dict,
-                 train_params: dict,
-                 model_params: dict
-                 ) -> None:
+    def __init__(
+        self,
+        data_params: dict,
+        run_params: dict,
+        train_params: dict,
+        model_params: dict,
+    ) -> None:
         """ Initialize a general pipeline for a dataset of word/code sequences
         """
         # Data and model parameters
-        self.data_fulldir = os.path.join(data_params['data_dir'],
-                                         data_params['data_subdir'])
+        self.data_fulldir = os.path.join(
+            data_params['data_dir'], data_params['data_subdir'],
+        )
         self.max_seq_len = data_params['max_seq_len']
         self.debug = run_params['debug']  # smaller dataset for training
         self.data_params = data_params
@@ -27,11 +29,12 @@ class DataPipeline():
         self.max_tokens = train_params['max_tokens_per_batch']
         self.tokenizer = self.get_tokenizer()
     
-    def get_pipeline(self,
-                     task: str,
-                     split: str,
-                     shuffle: bool=False
-                     ) -> torchdata.datapipes.iter.IterDataPipe:
+    def get_pipeline(
+        self,
+        task: str,
+        split: str,
+        shuffle: bool=False,
+    ) -> torchdata.datapipes.iter.IterDataPipe:
         """ General pipeline common to all models. Specificities include how
             data is parsed after being read in the json file and how the task
             is built for the model, once the data is encoded by the tokenizer
@@ -46,30 +49,36 @@ class DataPipeline():
         dp = data.JsonReader(self.data_fulldir, split)
         if self.data_params['subsample_mimic']:
             dp = data.MimicSubsampler(dp)
-        dp = data.TokenFilter(dp,
-                              self.run_params['ngrams_to_remove'],
-                              self.run_params['ngrams_to_reinsert'])
+        dp = data.TokenFilter(
+            dp,
+            self.run_params['ngrams_to_remove'],
+            self.run_params['ngrams_to_reinsert'],
+        )
         dp = data.Encoder(dp, self.tokenizer)
-        dp = data.TokenShuffler(dp,
-                                self.run_params['token_shuffle_prob'],
-                                self.run_params['token_shuffle_mode'])
+        dp = data.TokenShuffler(
+            dp,
+            self.run_params['token_shuffle_prob'],
+            self.run_params['token_shuffle_mode'],
+        )
         dp = self.select_task_pipeline(dp, task, split)
         dp = data.CustomBatcher(dp, self.max_tokens, self.max_seq_len, shuffle)
         dp = data.TorchPadder(dp, self.tokenizer)
         return dp
         
-    def select_task_pipeline(self,
-                             dp: torchdata.datapipes.iter.IterDataPipe,
-                             task: str,
-                             split: str
-                             ) -> torchdata.datapipes.iter.IterDataPipe:
+    def select_task_pipeline(
+        self,
+        dp: torchdata.datapipes.iter.IterDataPipe,
+        task: str,
+        split: str,
+    ) -> torchdata.datapipes.iter.IterDataPipe:
         """ Set the pipeline specific to the task of the model
         """
         if task == 'skipgram':
             return tasks.SkipGramMaker(dp, self.tokenizer, self.model_params)
         elif task == 'cooc':
-            return tasks.CoocMaker(dp, self.tokenizer, self.data_fulldir,
-                                   split, self.model_params)
+            return tasks.CoocMaker(
+                dp, self.tokenizer, self.data_fulldir, split, self.model_params,
+            )
         elif task in ['lm', 'mt', 'reagent_pred_mt']:
             return tasks.LMSetter(dp, self.tokenizer)
         elif task in ['mlm', 'reagent_pred_mlm']:
@@ -95,8 +104,7 @@ class DataPipeline():
             try:
                 with open(tokenizer.path, 'rb') as tokenizer_file:
                     tokenizer = pickle.load(tokenizer_file)
-                    print(' - Loaded tokenizer - voc: %s'  %\
-                          tokenizer.vocab_sizes)
+                    print(' - Loaded tokenizer - voc: %s' % tokenizer.vocab_sizes)
                     return tokenizer
             except:
                 print(' - Tokenizer not found, retraining it')
@@ -131,6 +139,6 @@ class DataPipeline():
             return data.SubWordTokenizer(
                 data_dir=self.data_fulldir,
                 special_tokens=self.model_params['special_tokens'],
-                **self.run_params
+                **self.run_params,
             )
         

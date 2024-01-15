@@ -32,8 +32,9 @@ class Tokenizer():
         unique_str = str(vars(self))
         return hashlib.sha256(unique_str.encode()).hexdigest()
 
-    def fit(self, words: list):        
-        # Compute and sort vocabulary
+    def fit(self, words: list):
+        
+        # Compute, filter and sort vocabulary by term frequency        
         word_vocab, word_counts = np.unique(words, return_counts=True)
         if self.min_freq > 0:  # remove rare words
             word_vocab = word_vocab[word_counts >= self.min_freq]
@@ -42,12 +43,15 @@ class Tokenizer():
         word_vocab = word_vocab[inds]
         
         # Generate word level encoder
-        self.encoder.update({i: (idx + len(self.special_tokens))
-                             for idx, i in enumerate(word_vocab)})
+        self.encoder.update({
+            i: idx + len(self.special_tokens) for idx, i in enumerate(word_vocab)
+        })
         
         # Store word count for every word (useful for skipgram dataset)
-        self.word_counts = {self.encoder[word]: count for word, count in \
-                            zip(word_vocab, sorted(word_counts)[::-1])}
+        self.word_counts = {
+            self.encoder[word]: count  # note that word_counts was not sorted yet
+            for word, count in zip(word_vocab, sorted(word_counts)[::-1])
+        }
         self.word_counts.update({k: 1 for k in self.special_tokens.values()})
         
         # Build decoder
@@ -187,12 +191,15 @@ class SubWordTokenizer():
         
         # Populate word level encoder (if not in char mode)
         len_so_far = len(self.encoder)
-        self.encoder.update({word: (idx + len_so_far)
-                             for idx, word in enumerate(word_vocab)})
+        self.encoder.update({
+            word: idx + len_so_far for idx, word in enumerate(word_vocab)
+        })
 
         # Store word count for every word (if not in char mode)
-        self.word_counts = {self.encoder[word]: count for word, count in \
-                            zip(word_vocab, sorted(word_counts)[::-1])}
+        self.word_counts = {
+            self.encoder[word]: count  # note that word_counts was not sorted yet
+            for word, count in zip(word_vocab, sorted(word_counts)[::-1])
+        }
         self.word_counts.update({k: 1 for k in self.special_tokens.values()})
 
         # Update encoder with ngram level vocabulary

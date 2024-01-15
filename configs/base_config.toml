@@ -14,14 +14,14 @@
   ngrams_to_remove = ['SUB_', 'ADM_']  # remove all tokens that contain any of these flags
   ngrams_to_reinsert = ['LBL_', 'DEM_']  # move all tokens that contain any of these flags at random positions
   debug = false  # if true, will use the smaller validation data as the training data
-  load_model = false  # note: changing ngram_len will change embedding layer
+  load_model = true  # note: changing ngram_len will change embedding layer
   load_tokenizer = true
   num_workers = 0  # TODO: check for potential issues with iter-style dataset for num_workers > 0
   pin_memory = false
 
 [data]
   data_dir = './data/datasets/mimic-iv-2.2'
-  data_subdir = 'datasets_unique'
+  data_subdir = 'datasets_full'
   log_dir = './logs'
   max_seq_len = 512
   subsample_mimic = false
@@ -50,7 +50,7 @@
     n_neg_samples = 0  # 0 for using softmax over all vocab tokens
     use_fixed_context = false
     max_context_size = 5
-    d_embed = 512
+    d_embed = 256
     [models.word2vec.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -62,7 +62,7 @@
     n_neg_samples = 0  # 0 for using softmax over all vocab tokens
     use_fixed_context = false
     max_context_size = 5
-    d_embed = 512
+    d_embed = 256
     [models.fasttext.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -71,12 +71,12 @@
     task = 'cooc'
     input_keys = ['left', 'right']
     label_keys = ['cooc']
-    load_cooc_data = true  # false
+    load_cooc_data = false
     use_whole_sentence = true
     use_fixed_context = false
     left_context_size = 10
     right_context_size = 10
-    d_embed = 512
+    d_embed = 256
     [models.glove.special_tokens]
       '[PAD]' = 0
       '[UNK]' = 1
@@ -85,11 +85,11 @@
     task = 'lm'
     input_keys = ['sample']
     label_keys = ['sample']
-    d_conv = [512, 512]
+    d_conv = [256, 256]
     k_size = [2, 3]  # should be ngram_len lists?
     d_embed_char = 256
     d_embed_word = 256
-    d_lstm = 512
+    d_lstm = 256
     n_lstm_layers = 2
     token_type = 'char'  # 'char' (classic elmo), 'word', 'both'
     dropout = 0.5

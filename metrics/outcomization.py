@@ -1,235 +1,294 @@
+import os
+import data
+import pickle
 import torch
 import numpy as np
-import random
 import matplotlib.pyplot as plt
-import tempfile
-import data
 import pytorch_lightning as pl
-from PIL import Image
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
+from matplotlib.lines import Line2D
 from tqdm import tqdm
+from metrics.metric_utils import (
+    compute_reduced_representation,
+    log_figure_to_board,
+)
 
 
-DIMENSIONALITY_REDUCTION_ALGORITHM = 'tsne'  # 'pca', 'tsne'
-assert DIMENSIONALITY_REDUCTION_ALGORITHM in ('pca', 'tsne'),\
-    'Invalid algorithm for dimensionality reduction [pca, tsne]'
-REDUCED_DIM = 2  # 2, 3
-assert REDUCED_DIM in [2, 3], 'Invalid reduced dimensionality [2, 3]'
+LOAD_REDUCED_DATA = False  # set this to True if you just want to change the plot
 FIG_SIZE = (14, 5)
 SMALL_TEXT_SIZE = 8
 BIG_TEXT_SIZE = 14
 OUTCOME_CLASSES = {
-    'length-of-stay': ['LBL_SHORT', 'LBL_LONG'],
-    'readmission': ['LBL_AWAY', 'LBL_READM'],
-    'mortality': ['LBL_ALIVE', 'LBL_DEAD'],
+    "length-of-stay": ["LBL_SHORT", "LBL_LONG"],
+    "readmission": ["LBL_AWAY", "LBL_READM"],
+    "mortality": ["LBL_ALIVE", "LBL_DEAD"],
 }
 ALL_OUTCOME_LEVELS = [t for v in OUTCOME_CLASSES.values() for t in v]
-N_FRAMES = 100  # actually corresponds to n_frames - 1
-PARTIAL_INFO_LEVELS = np.arange(0.0, 1.0 + 1.0 / N_FRAMES, 1.0 / N_FRAMES)
-N_SAMPLES = 1807  # 1807 dead patients = limiting factor
-USE_TIME_WEIGHTS = True
-TIME_WEIGHTS = [1 / (t + 1) for t in range(100_000)][::-1]
 
 
-def outcomization_task(model: torch.nn.Module,
-                       pipeline: data.DataPipeline,
-                       logger: pl.loggers.tensorboard.TensorBoardLogger,
-                       global_step: int,
-                       ) -> None:
+def outcomization_task(
+    model: torch.nn.Module,
+    pipeline: data.DataPipeline,
+    logger: pl.loggers.Logger,
+    global_step: int,
+) -> None:
     """ Reduce the dimensionality of concept embeddings for different categories
-        and log a scatter plot of patients with different outcome labels
+        and log a scatter plot of the low-dimensional data to tensorboard
     """
-    print('\nProceeding with outcomization testing metric')
-    proj_params = {'projection': '3d'} if REDUCED_DIM == 3 else {}
-    patient_reduced, class_reduced, golds = get_reduced_data(pipeline, model)
-    fig_axs_frames = []
-    desc = 'Generating gif frame for different levels of partial information'
-    for i, partial_info in tqdm(enumerate(PARTIAL_INFO_LEVELS), desc=desc):
-        fig, axs = plt.subplots(1, 3, figsize=(16, 5), subplot_kw=proj_params)
-        partial_patient_reduced = patient_reduced[i::len(PARTIAL_INFO_LEVELS)]
-        scatter_reduced_data(partial_patient_reduced, partial_info,
-                             class_reduced, golds, axs)
-        plt.tight_layout()
-        fig_axs_frames.append((fig, axs))
-    gif_title = 'outcomization_metric_%s_samples' % N_SAMPLES
-    log_gif_to_tensorboard(fig_axs_frames, gif_title, logger, global_step)
-
-
-def log_gif_to_tensorboard(fig_axs_frames: list[tuple[plt.Figure, plt.Axes]],
-                           gif_title: str,
-                           logger: pl.loggers.tensorboard.TensorBoardLogger,
-                           global_step: int
-                           ) -> None:
-    """ Log a list of figures as a video using tensorboard gif visualizer
-    """
-    fig_frames, axs_frames = zip(*fig_axs_frames)
-    normalize_boundaries(axs_frames)
-    tensor_frames = []
-    for fig_frame in fig_frames:
-        temp_file_name = tempfile.NamedTemporaryFile(suffix='.png').name
-        fig_frame.savefig(temp_file_name, dpi=100, bbox_inches='tight')  
-        np_frame = np.asarray(Image.open(temp_file_name)).transpose(2, 0, 1)
-        tensor_frames.append(torch.tensor(np_frame))  # (C, H, W)
-    min_c, min_h, min_w = [min([t.shape[i] for t in tensor_frames]) for i in [0, 1, 2]]
-    tensor_frames = [t[:min_c,:min_h,:min_w] for t in tensor_frames]  # unified shape
-    vid_tensor = torch.stack(tensor_frames, axis=0).unsqueeze(dim=0)
-    logger.experiment.add_video(tag=gif_title,
-                                vid_tensor=vid_tensor,  # (N, T, C, H, W)
-                                fps=12,
-                                global_step=global_step)
+    # Load results directly if required (e.g., for re-plotting final figure)
+    load_or_save_path = os.path.join(logger.save_dir, "outcomization_data.pkl")    
+    if LOAD_REDUCED_DATA:
+        patient_embeddings, outcome_embeddings, vocab_embeddings, gold_list = \
+            load_or_save(load_or_save_path, "load")
     
-
-def compute_reduced_representation(embeddings: np.ndarray) -> np.ndarray:
-    """ Reduce the dimensionality of high-dimensional concept embeddings
-    """
-    if DIMENSIONALITY_REDUCTION_ALGORITHM == 'pca':
-        return PCA().fit_transform(embeddings)[:, :REDUCED_DIM]
-    elif DIMENSIONALITY_REDUCTION_ALGORITHM == 'tsne':
-        params = {
-            'perplexity': 30.0,
-            'learning_rate': 'auto',  # or any value in [10 -> 1000] may be good
-            'n_iter': 10000,
-            'n_iter_without_progress': 1000,
-            'metric': 'cosine',
-            'init': 'pca',
-            'n_jobs': 20,
-        }
-        return TSNE(REDUCED_DIM, **params).fit_transform(embeddings)
-
-
-def get_reduced_data(pipeline: data.DataPipeline,
-                     model: torch.nn.Module):
-    """ ...
-    """
-    # Initialize testing data pipeline
-    to_remove = pipeline.run_params['ngrams_to_remove']
-    dp = data.JsonReader(pipeline.data_fulldir, 'test')
-    dp = data.TokenFilter(dp, to_remove=to_remove, to_split=ALL_OUTCOME_LEVELS)
+    # Or compute them from the model and testing dataset
+    else:
+        print("\nProceeding with outcomization testing metric")
+        # Get reduced embeddings for all tokens of the model"s vocabulary
+        vocab_embedding_dict, vocab_count_dict = \
+            get_vocab_embeddings_and_counts(model, pipeline)
+            
+        # Initialize testing data pipeline
+        to_remove = pipeline.run_params["ngrams_to_remove"]
+        dp = data.JsonReader(pipeline.data_fulldir, "test")
+        dp = data.TokenFilter(dp, to_remove=to_remove, to_split=ALL_OUTCOME_LEVELS)
+        
+        # Compute patient embeddings and associated labels
+        embedding_list, gold_list, seen_set = list(), list(), set()
+        for sample, gold in tqdm(dp, desc="Getting patient embeddings"):
+            embedding = get_patient_embedding(
+                sample, vocab_count_dict, vocab_embedding_dict,
+            )
+            embedding_hash = hash(embedding.tobytes())
+            if embedding_hash not in seen_set:  # avoiding duplicates
+                seen_set.add(embedding_hash)
+                embedding_list.append(embedding)
+                gold_list.append(gold)
+        
+        # Get reduced representation of patients, single tokens, and labels
+        patient_embeddings, outcome_embeddings, vocab_embeddings = \
+            reduce_embeddings(embedding_list, vocab_embedding_dict)
+            
+        # Save embeddings for potential later use (e.g. re-plotting)
+        load_or_save(
+            load_or_save_path, "save", patient_embeddings, outcome_embeddings,
+            vocab_embeddings, gold_list,
+        )
     
-    # Compute patient embeddings and associated labels
-    embeddings, golds = [], []
-    for s, g in tqdm(dp, desc='Getting patient embeddings'):
-        embeddings.append(get_patient_embedding(model, s, pipeline))
-        golds.append(g)
+    # Compute and send a scatter-plot of patients" evolutions to tensorboard
+    fig = scatter_patients_and_outcomes(
+        patient_embeddings, outcome_embeddings, vocab_embeddings, gold_list,
+    )
+    log_figure_to_board(fig, "outcomization_metric_test", logger, global_step)
     
-    # Add outcome embeddings to the set of embeddings that will be reduced
-    outcomes_encoded = [pipeline.tokenizer.encode(l) for l in ALL_OUTCOME_LEVELS]
-    outcomes_embedded = model.get_token_embeddings(outcomes_encoded)
-    embeddings.append(outcomes_embedded)  # all at once
-    # if isinstance(outcomes_encoded[0], list):
-    #     weights = [1 / pipeline.tokenizer.word_counts[t[0]] for t in outcomes_encoded]
-    # else:
-    #     weights = [1 / pipeline.tokenizer.word_counts[t] for t in outcomes_encoded]
-    # embeddings.extend([w * e for w, e in zip(weights, outcomes_embedded)])
-
-    # Compute reduced representation of both patients and class labels
-    print('Reducing embedded data')
-    reduced = compute_reduced_representation(torch.cat(embeddings, dim=0))
-    patient_reduced = reduced[:-len(ALL_OUTCOME_LEVELS)]
-    class_reduced = reduced[-len(ALL_OUTCOME_LEVELS):]
-
-    # Return everything needed for the plot
-    return patient_reduced, class_reduced, golds
-
-
-def scatter_reduced_data(patient_reduced: np.ndarray,
-                         partial_info: float,
-                         class_reduced: np.ndarray,
-                         golds: list[str],
-                         axs: list[plt.Axes]):
-    """ ...
-    """
-    # Plot all reduced embeddings for different outcome classes
-    for i, (cat, classes) in enumerate(OUTCOME_CLASSES.items()):
-        this_class_reduced = class_reduced[2 * i:2 * (i + 1)]
-        scatter_reduced_outcomes(classes, this_class_reduced, patient_reduced,
-                                 golds, axs[i])
-        title = '%s visualization, P = %.2f' % (cat.capitalize(), partial_info)
-        axs[i].set_title(title, fontsize=BIG_TEXT_SIZE)
-
-
-def scatter_reduced_outcomes(classes: list[str],
-                             class_reduced: np.ndarray,
-                             patient_reduced: np.ndarray,
-                             golds: list[str],
-                             ax: plt.Axes,
-                             n_samples: int=N_SAMPLES):    
-    """ Visualize n_samples patient embeddings for each value of a class
-    """
-    pos_reduced = [r for r, g in zip(patient_reduced, golds) if classes[0] in g]
-    neg_reduced = [r for r, g in zip(patient_reduced, golds) if classes[1] in g]  
-    pos_samples = random.sample(pos_reduced, min(n_samples, len(pos_reduced)))
-    neg_samples = random.sample(neg_reduced, min(n_samples, len(neg_reduced)))
-    pos_class_name = classes[0].split('_')[1].lower()
-    neg_class_name = classes[1].split('_')[1].lower()
-    leg_pos_pat = '%s patient' % pos_class_name.capitalize()
-    leg_neg_pat = '%s patient' % neg_class_name.capitalize()
-    leg_pos_tok = '%s token' % pos_class_name.capitalize()
-    leg_neg_tok = '%s token' % neg_class_name.capitalize()    
-    ax.scatter(*np.array(pos_samples).T, c='blue', s=3, alpha=0.5, zorder=1, label=leg_pos_pat)
-    ax.scatter(*np.array(neg_samples).T, c='red', s=3, alpha=0.5, zorder=1, label=leg_neg_pat)
-    ax.scatter(*np.array(class_reduced[0]).T, c='cyan', s=50, zorder=2, label=leg_pos_tok)
-    ax.scatter(*np.array(class_reduced[1]).T, c='yellow', s=50, zorder=2, label=leg_neg_tok)
-    ax.set_xticklabels([]); ax.set_yticklabels([]); ax.set_xticks([]); ax.set_yticks([])
-    ax.legend(fontsize=SMALL_TEXT_SIZE, ncol=2, loc='upper left')
     
+def reduce_embeddings(
+    embeddings: list[np.ndarray],
+    vocab_embedding_dict: dict[str, np.ndarray],
+) -> tuple[np.ndarray, np.ndarray]:
+    """ Combine patient and outcome embeddings into reduced representation
+    """
+    # Build patient and outcome embedding arrays
+    patient_embeddings = np.stack([np.mean(e, axis=0) for e in embeddings])
+    outcome_embeddings = np.stack(
+        [vocab_embedding_dict[t] for t in ALL_OUTCOME_LEVELS
+    ])
+    vocab_embeddings = np.stack([
+        vocab_embedding_dict[t] for t in vocab_embedding_dict
+        if t not in ALL_OUTCOME_LEVELS
+    ])
+    
+    # Collect all embeddings in a single array
+    all_embeddings = (patient_embeddings, outcome_embeddings, vocab_embeddings)
+    all_embeddings = np.concatenate(all_embeddings)
+    # all_embeddings_means = all_embeddings.mean(axis=1, keepdims=True)
+    # all_embeddings_stds = all_embeddings.std(axis=1, keepdims=True)
+    # all_embeddings = (all_embeddings - all_embeddings_means) / all_embeddings_stds
+    
+    # Compute reduced representation of combined array (patients, tokens, labels)
+    red_embeddings = compute_reduced_representation(
+        all_embeddings, tsne_metric="cosine", rdm_metric="correlation",
+    )
+    
+    # Separate reduced patient, vocab, and outcome embeddings
+    red_patient_embeddings = red_embeddings[:len(patient_embeddings)]
+    red_outcome_embeddings = red_embeddings[
+        len(patient_embeddings):len(patient_embeddings) + len(outcome_embeddings)
+    ]
+    red_vocab_embeddings = red_embeddings[
+        len(patient_embeddings) + len(outcome_embeddings):
+    ]
+    
+    # Return all results
+    return red_patient_embeddings, red_outcome_embeddings, red_vocab_embeddings
 
-def get_patient_embedding(model: torch.nn.Module,
-                          sample: list[str],
-                          pipeline: data.DataPipeline,
-                          ) -> torch.Tensor:
+
+def get_vocab_embeddings_and_counts(
+    model: torch.nn.Module,
+    pipeline: data.DataPipeline,
+) -> tuple:
+    """ Compute embedding vector for all tokens of the dataset (even rare ones)
+    """
+    print("Computing reduced embeddings for all tokens of the testing dataset")
+    # Get vocabulary and corresponding counts
+    dp = data.JsonReader(pipeline.data_fulldir, "test")
+    dp = data.TokenFilter(dp, pipeline.run_params["ngrams_to_remove"])
+    all_tokens = [token for sentence in dp for token in sentence]
+    vocab, counts = np.unique(all_tokens, return_counts=True)
+    
+    # Compute reduced embeddigs for all tokens from the vocabulary
+    encodings = [pipeline.tokenizer.encode(token) for token in vocab]
+    embeddings = model.get_token_embeddings(encodings).numpy()
+    
+    # Build and return dictionaries
+    embedding_dict = {token: emb for token, emb in zip(vocab, embeddings)}
+    count_dict = {token: count for token, count in zip(vocab, counts)}
+    return embedding_dict, count_dict
+
+
+def get_patient_embedding(
+    sample: list[str],
+    vocab_counts: dict[str, int],
+    vocab_embeddings: dict[str, np.ndarray],
+    use_weights: bool=True,
+) -> np.ndarray:
     """ Generate a sequence embedding for a patient sample in which tokens that
         do not belong to a given category were removed
         - The result is a weighted average of all tokens embeddings
         - Weigths are proportional to token inverse frequency (in train dataset)
-        - Time-weights can be added too (elilgibility trace)
-        - N embeddings per patient are generated, N = len(PARTIAL_INFO_LEVELS)
     """
-    # Encode patient tokens and compute weights based on term frequencies
-    encoded = [pipeline.tokenizer.encode(t) for t in sample]
-    if isinstance(encoded[0], list):
-        weights = [1 / pipeline.tokenizer.word_counts[t[0]] for t in encoded]
+    # Build a numpy array from patient token embeddings
+    embeddings = np.stack([vocab_embeddings[t] for t in sample])
+    if not use_weights:
+        return embeddings
+    
+    # Weight each token using inverse token frequency, if required
+    weights = np.array([1 / vocab_counts[t] for t in sample], dtype=embeddings.dtype)
+    # weights = weights / weights.sum()  # to standardize differently lengthed patients?
+    weighted_embeddings = embeddings * weights[:, np.newaxis]
+    return weighted_embeddings  # shape (n_tokens, n_features)
+
+
+def scatter_patients_and_outcomes(
+    patient_embeddings: np.ndarray,
+    outcome_embeddings: np.ndarray,
+    vocab_embeddings: np.ndarray,
+    gold_list: list[str],
+) -> plt.Figure:
+    """ Visualize n_samples patient embeddings for each outcome class
+    """
+    print("Plotting reduced patient and outcome embeddings")
+    fig, axs = plt.subplots(1, len(OUTCOME_CLASSES), figsize=FIG_SIZE)
+    for i, (cat, outcome_tokens) in enumerate(OUTCOME_CLASSES.items()):
+        
+        # Retrieve data
+        cat_outcome_embeddings = outcome_embeddings[2 * i:2 * (i + 1)]
+        pos_outcome_name = outcome_tokens[0].split("_")[1].lower()  # "LBL_..."
+        neg_outcome_name = outcome_tokens[1].split("_")[1].lower()  # "LBL_..."
+        pos_patient_embeddings = [
+            r for r, g in zip(patient_embeddings, gold_list)
+            if outcome_tokens[0] in g
+        ]
+        neg_patient_embeddings = [
+            r for r, g in zip(patient_embeddings, gold_list)
+            if outcome_tokens[1] in g
+        ]
+        
+        # Plot retrieved data
+        patient_params = {"s": 0.1, "alpha": 0.8, "zorder": 1}
+        outcome_params = {"s": 150, "edgecolor": "black", "marker": "*", "zorder": 2}
+        vocab_params = {"s": 0.1, "alpha": 0.7, "zorder": 0}
+        ax = axs[i]
+        ax.set_title("Category %s" % cat, fontsize=BIG_TEXT_SIZE)
+        ax.scatter(*np.array(pos_patient_embeddings).T, c="blue", **patient_params)
+        ax.scatter(*np.array(neg_patient_embeddings).T, c="red", **patient_params)
+        ax.scatter(*np.array(cat_outcome_embeddings[0]).T, c="cyan", **outcome_params)
+        ax.scatter(*np.array(cat_outcome_embeddings[1]).T, c="gold", **outcome_params)
+        ax.scatter(*np.array(vocab_embeddings).T, c="gray", **vocab_params)
+        
+        # Polish figure (no ticks nor tick labels, legend with fixed symbol-size)
+        label_fn = lambda name, type: "%s %s" % (name.capitalize(), type)
+        patient_params = {"marker": "s", "color": "w", "markersize": 10}
+        outcome_params = {"marker": "*", "color": "w", "markersize": 10, "markeredgecolor": "black"}
+        vocab_params = {"marker": "s", "color": "w", "markersize": 10}
+        ax.set_xticklabels([]); ax.set_xticks([])
+        ax.set_yticklabels([]); ax.set_yticks([])
+        legend_markers = [
+            Line2D([0], [0], label=label_fn(pos_outcome_name, "patients"), markerfacecolor="blue", **patient_params),
+            Line2D([0], [0], label=label_fn(neg_outcome_name, "patients"), markerfacecolor="red", **patient_params),
+            Line2D([0], [0], label=label_fn(pos_outcome_name, "token"), markerfacecolor="cyan", **outcome_params),
+            Line2D([0], [0], label=label_fn(neg_outcome_name, "token"), markerfacecolor="gold", **outcome_params),
+            Line2D([0], [0], label="Single tokens", markerfacecolor="gray", **vocab_params),
+        ]
+        ax.legend(
+            handles=legend_markers, loc="upper center",
+            ncol=3, columnspacing=0.75, fontsize=SMALL_TEXT_SIZE,
+        )
+        
+    # Return final figure
+    return fig
+
+
+def load_or_save(
+    path: str,
+    mode: str,
+    patient_embeddings: list=None,
+    outcome_embeddings: list=None,
+    vocab_embeddings: list=None,
+    gold_list: list=None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, list]:
+    """ Load or save data for replotting
+    """
+    # Save embeddings and labels for later use (e.g., replotting)
+    if mode == "save":
+        with open(path, "wb") as handle:
+            dict_to_save = {
+                "patient_embeddings": patient_embeddings,
+                "outcome_embeddings": outcome_embeddings,
+                "vocab_embeddings": vocab_embeddings,
+                "gold_list": gold_list}
+            pickle.dump(dict_to_save, handle)
+    
+    # Load embeddings and labels from previously saved run
     else:
-        weights = [1 / pipeline.tokenizer.word_counts[t] for t in encoded]
+        with open(path, "rb") as handle:
+            to_load = pickle.load(handle)
+            return (
+                to_load["patient_embeddings"],
+                to_load["outcome_embeddings"],
+                to_load["vocab_embeddings"],
+                to_load["gold_list"],
+            )
+            
+            
+# def get_patient_embedding(sample: list[str],
+#                           vocab_counts: dict[str, int],
+#                           vocab_embeddings: dict[str, np.ndarray],
+#                           ) -> torch.Tensor:
+#     """ Generate a sequence embedding for a patient sample in which tokens that
+#         do not belong to a given category were removed
+#         - The result is a weighted average of all tokens embeddings
+#         - Weigths are proportional to token inverse frequency (in train dataset)
+#         - N embeddings per patient are generated, N = len(PARTIAL_INFO_LEVELS)
+#     """
+#     # Get patient tokens embeddings and weight them by term frequencies
+#     embeddings = np.stack([vocab_embeddings[t] for t in sample])
+#     weights = np.array([1 / vocab_counts[t] for t in sample])
+#     weighted_embeddings = embeddings * weights[:, np.newaxis]
+        
+#     # Separate fixed embeddings from new information
+#     is_dem = np.array(["DEM_" in t for t in sample])
+#     fixed_embeddings = weighted_embeddings[is_dem]
+#     new_embeddings = weighted_embeddings[~is_dem]
     
-    # Compute patient embeddings for different levels of partial information
-    fixed_enc = [encoded[n] for n, t in enumerate(sample) if 'DEM_' in t
-                 and not any([s in t for s in OUTCOME_CLASSES])]
-    fixed_wgt = [weights[n] for n, t in enumerate(sample) if 'DEM_' in t]
-    timed_idx = [n for n, t in enumerate(sample) if 'DEM_' not in t]
-    sentence_embeddings = []
-    for partial in PARTIAL_INFO_LEVELS:
+#     # Build vectors from growing partial information
+#     averaged_partial_embedding_list = []
+#     for partial in PARTIAL_INFO_LEVELS:
+#         n_new_tokens = int(len(new_embeddings) * partial)
+#         partial_info = (fixed_embeddings, new_embeddings[:n_new_tokens])
+#         partial_embeddings = np.concatenate(partial_info, axis=0)
+#         averaged_partial_embedding = np.mean(partial_embeddings, axis=0)
+#         averaged_partial_embedding_list.append(averaged_partial_embedding)
         
-        # Get partial encodings and associated weights 
-        partial_timed_idx = timed_idx[:int(len(timed_idx) * partial)]
-        enc = fixed_enc + [encoded[i] for i in partial_timed_idx]
-        wgt = fixed_wgt + [weights[i] for i in partial_timed_idx]
-        
-        # Apply eligibility trace if required and compute sentence embeddings
-        if USE_TIME_WEIGHTS:
-            time_wgt = TIME_WEIGHTS[-len(wgt):]
-            wgt = [w * t for w, t in zip(wgt, time_wgt)]
-        sentence_embeddings.append(model.get_sequence_embeddings(enc, wgt))
-    
-    # Return partial sentences stacked over a new dimension
-    return torch.stack(sentence_embeddings, dim=0)
-
-
-def normalize_boundaries(axs_frames: list[plt.Axes]):
-    """ Set the same x and y boundaries for all figure frames
-    """
-    x_lim_mins = [min([ax.get_xlim()[0] for ax in axs_list])
-                  for axs_list in list(zip(*axs_frames))]
-    x_lim_maxs = [max([ax.get_xlim()[1] for ax in axs_list])
-                  for axs_list in list(zip(*axs_frames))]
-    y_lim_mins = [min([ax.get_ylim()[0] for ax in axs_list])
-                  for axs_list in list(zip(*axs_frames))]
-    y_lim_maxs = [max([ax.get_ylim()[1] for ax in axs_list])
-                  for axs_list in list(zip(*axs_frames))]
-    for axs in axs_frames:
-        zipped = zip(axs, x_lim_mins, x_lim_maxs, y_lim_mins, y_lim_maxs)
-        for ax, x_min, x_max, y_min, y_max in zipped:
-            ax.set_xlim((x_min, x_max))
-            ax.set_ylim((y_min, y_max))
-        
+#     # Return partial sentences stacked over a new dimension
+#     import pdb; pdb.set_trace()
+#     return np.stack(averaged_partial_embedding_list)

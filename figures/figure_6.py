@@ -3,107 +3,140 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from scipy.stats import rankdata
 
-do_bis_figure = False
-models = ['word2vec', 'fasttext', 'glove']
-model_titles = {'word2vec': 'word2vec', 'fasttext': 'fastText', 'glove': 'GloVe'}
-categories = ['DIA_', 'PRO_', 'MED_']
-cat_mappings = {'DIA_': 'MOR_', 'PRO_': 'REA_', 'MED_': 'LOS_'}
-measure_lbls = ['AUROC-BI', 'AUPRC-BI']
-result_dir = os.path.join(os.getcwd(), 'logs_04_03', 'full_whole05_shuffle')
 
-alphas = [0.2, 0.4, 0.6, 0.8, 1.0]
-partials = ['P = 0.0', 'P = 0.1', 'P = 0.3', 'P = 0.6', 'P = 1.0']
-x_data = {'AUROC': 0, 'AUPRC': 1}
-desc = {'LOS_': 'Length-of-stay', 'REA_': 'Readmission', 'MOR_': 'Mortality'}
-y_lims = {'LOS_': [0.0, 1.0], 'REA_': [0.0, 1.0], 'MOR_': [0.0, 1.0]}
-bar_specs = {'width': 0.12, 'edgecolor': 'black', 'linewidth': 0.7, 'zorder': 10}
-marker_specs = {'marker': 'o', 'markersize': 3}
-perf_colors = {'word2vec': 'tab:green', 'fasttext': 'tab:blue', 'glove': 'tab:red'}
-rand_colors = {'auroc': 'k', 'auprc': 'k'}
-medal_colors = {1: 'goldenrod', 2: 'dimgrey', 3: 'firebrick'}
-perfs_rand = {
-    'LOS_': [[0.500, 0.163]] * 5,
-    'REA_': [[0.500, 0.197]] * 5,
-    'MOR_': [[0.500, 0.042]] * 5,
+MODELS = ["word2vec", "fasttext", "glove"]
+MODEL_TITLES = {"word2vec": "word2vec", "fasttext": "fastText", "glove": "GloVe"}
+RESULT_DIR = os.path.join(os.getcwd(), "logs_true_latest", "full_whole05_shuffle")
+CATEGORIES = ["DIA_", "PRO_", "MED_"]
+CAT_MAPPINGS = {"DIA_": "MOR_", "PRO_": "REA_", "MED_": "LOS_"}
+MEASURE_LABELS = ["AUROC-BI", "AUPRC-BI"]
+MEASURE_SUFFIXES = ["", "-STD", "-STE"]
+ALPHAS = [0.2, 0.4, 0.6, 0.8, 1.0]
+PARTIALS = ["P = 0.0", "P = 0.1", "P = 0.3", "P = 0.6", "P = 1.0"]
+X_DATA = {"AUROC": 0, "AUPRC": 1}
+DESCRS = {"LOS_": "Length-of-stay", "REA_": "Readmission", "MOR_": "Mortality"}
+Y_LIMS = {"LOS_": [0.0, 1.0], "REA_": [0.0, 1.0], "MOR_": [0.0, 1.0]}
+BAR_SPECS = {"width": 0.12, "edgecolor": "black", "linewidth": 0.7, "zorder": 10}
+MARKER_SPECS = {"marker": "o", "markersize": 3}
+PERF_COLORS = {"word2vec": "tab:green", "fasttext": "tab:blue", "glove": "tab:red"}
+RAND_COLORS = {"auroc": "k", "auprc": "k"}
+RANDOM_PERFS = {
+    "LOS_": [[0.500, 0.163]] * len(PARTIALS),
+    "REA_": [[0.500, 0.197]] * len(PARTIALS),
+    "MOR_": [[0.500, 0.042]] * len(PARTIALS),
 }
 
-all_perfs = {}
-for model in models:
-    model_dir = next((os.path.join(result_dir, item) for item in os.listdir(result_dir) if model in item))
-    pred_file = next((os.path.join(model_dir, item) for item in os.listdir(model_dir) if 'prediction' in item))
-    pred_df = pd.read_csv(pred_file)
-    perfs = {cat_mappings[cat]: pred_df[pred_df['Category'] == cat][measure_lbls].values.tolist() for cat in categories}
-    all_perfs.update({model: perfs})
 
-if not do_bis_figure:
-    fig, axs = plt.subplots(3, 3, figsize=(10, 8))
-    for i, (ax, cat) in enumerate(zip(axs, desc.keys())):
-        p_rand = np.array(perfs_rand[cat]).mean(axis=0)
+def main():
+    """ Load binary outcome prediction performance of all models and plots them
+        in figure 6
+    """
+    all_perf_dict = {}
+    for model in MODELS:
+        model_perf_df = load_data(RESULT_DIR, model, "prediction")
+        model_perf_dict = load_perf(model_perf_df)
+        all_perf_dict.update({model: model_perf_dict})
+    generate_figure_6(all_perf_dict)
+        
 
-        # mean_perf = {}
-        # for model, perfs in all_perfs.items():
-        #     mean_perf[model] = np.array(perfs[cat]).mean(axis=0)
-        # medals = []
-        # for i, x in enumerate(x_data):
-        #     mean_perfs = [mean_perf[m][i] for m in models]
-        #     ranks = len(mean_perfs) - rankdata(mean_perfs, method='ordinal') + 1
-        #     medals.append(ranks)
-        # medals = {m: r for m, r in zip(models, zip(*medals))}
+def load_data(dir, model, key):
+    """ Load data from the first directory including a given model name in its
+        name, opening the first file that includes a given key in its name
+    """
+    model_dir = next((
+        os.path.join(dir, item)
+        for item in os.listdir(dir)
+        if model in item
+    ))
+    pred_file = next((
+        os.path.join(model_dir, item)
+        for item in os.listdir(model_dir)
+        if key in item
+    ))
+    return pd.read_csv(pred_file)
 
-        for j, (model, perfs) in enumerate(all_perfs.items()):
-            for k, (perf, prt, a) in enumerate(zip(perfs[cat], partials, alphas)):
-                facecolor =  mcolors.to_rgb(perf_colors[model]) + (a,)
-                ax[j].bar(np.arange(len(x_data)) + k*bar_specs['width'], perf,
-                        **bar_specs, facecolor=facecolor, label=prt)
+
+def load_perf(model_df: pd.DataFrame) -> dict:
+    """ Load model prediction performance from dataframe as a dictionary
+    """
+    perf_dict = {}
+    for cat in CATEGORIES:
+        cat_perf_df = model_df[model_df["Category"] == cat]
+        cat_perf_dict = {}
+        
+        for suffix in MEASURE_SUFFIXES:
+            labels = [label + suffix for label in MEASURE_LABELS]
+            cat_perf_dict[suffix] = cat_perf_df[labels].values.tolist()
             
-            rand_xs = [[x - bar_specs['width'], x + bar_specs['width'] * len(perfs[cat])] for x in x_data.values()]
-            ax[j].plot(rand_xs[0], [p_rand[0], p_rand[0]], '--', c='k',label='random', zorder=20)
-            ax[j].plot(rand_xs[1], [p_rand[1], p_rand[1]], '--', c='k',label='_no_legend_', zorder=20)
-            ax[j].set_xticks([x + (len(perfs[cat]) // 2) * bar_specs['width'] for x in x_data.values()])
-            ax[j].set_xticklabels(list(x_data.keys()), fontsize='large')
-            ax[j].tick_params(axis='both', which='both',length=0)
-            ax[j].set_ylim(y_lims[cat])
+        perf_dict[CAT_MAPPINGS[cat]] = cat_perf_dict
+        
+    return perf_dict
+
+
+def generate_figure_6(perf_dict: dict) -> None:
+    """ Draw figure from data dictionary
+    """
+    # Go through all categories
+    _, axs = plt.subplots(3, 3, figsize=(10, 8))
+    for i, (ax, cat) in enumerate(zip(axs, DESCRS.keys())):
+        p_rand = np.array(RANDOM_PERFS[cat]).mean(axis=0)
+        
+        # Go through all models
+        for j, (model, perfs) in enumerate(perf_dict.items()):
+            perf_means = perfs[cat][MEASURE_SUFFIXES[0]]
+            perf_stds = perfs[cat][MEASURE_SUFFIXES[1]]
+            perf_stes = perfs[cat][MEASURE_SUFFIXES[2]]
+            for k, (means, stds, stes, partial, alpha) in enumerate(
+                zip(perf_means, perf_stds, perf_stes, PARTIALS, ALPHAS)
+            ):
+                
+                # Draw coloured bars
+                facecolor =  mcolors.to_rgb(PERF_COLORS[model]) + (alpha,)
+                ax[j].bar(
+                    np.arange(len(X_DATA)) + k * BAR_SPECS["width"],
+                    means, **BAR_SPECS, facecolor=facecolor, label=partial,
+                )
+                
+                # Draw error bars on top of the coloured bars
+                errs = [s / 2 for s in stds]  # one on each side
+                ax[j].errorbar(
+                    np.arange(len(X_DATA)) + k * BAR_SPECS["width"], means, errs,
+                    fmt='none', ecolor='k', alpha=0.8, capsize=3, zorder=20,
+                )
+            
+            # Draw random performance as a dashed line
+            rand_xs = [
+                [x - BAR_SPECS["width"], x + BAR_SPECS["width"] * len(PARTIALS)]
+                for x in X_DATA.values()
+            ]
+            ax[j].plot(
+                rand_xs[0], [p_rand[0], p_rand[0]], "--",
+                c="k", label="random", zorder=20,
+            )
+            ax[j].plot(
+                rand_xs[1], [p_rand[1], p_rand[1]], "--",
+                c="k",label="_no_legend_", zorder=20,
+            )
+            
+            # Polish figure
+            ax[j].set_xticks([
+                x + (len(perfs[cat]) // 2) * BAR_SPECS["width"]
+                for x in X_DATA.values()
+            ])
+            ax[j].set_xticklabels(list(X_DATA.keys()), fontsize="large")
+            ax[j].tick_params(axis="both", which="both",length=0)
+            ax[j].set_ylim(Y_LIMS[cat])
             ax[j].legend(labelspacing=0.2)
             ax[j].grid()
-            if j == 0: ax[j].set_ylabel('AUPRC - %s' % desc[cat], fontsize='large')
-            if i == 0: ax[j].set_title(model_titles[model], fontsize='large')
-            
-            # for i, x in enumerate(x_data):
-            #     ax[j].get_xticklabels()[i].set_color(medal_colors[medals[model][i]])
-            #     ax[j].get_xticklabels()[i].set_fontweight('bold')
-            
+            if j == 0: ax[j].set_ylabel("AUPRC - %s" % DESCRS[cat], fontsize="large")
+            if i == 0: ax[j].set_title(MODEL_TITLES[model], fontsize="large")
+    
+    # Save figure to a png file
     plt.tight_layout()
-    plt.savefig('figures/figure_6.png', dpi=300)
+    plt.savefig("figures/figure_6.png", dpi=300)
 
-else:
-    bar_specs = {'width': 0.18, 'edgecolor': 'black', 'linewidth': 0.7, 'zorder': 10}
-    fig, axs = plt.subplots(2, 3, figsize=(11, 6))
-    for i, (measure, ax) in enumerate(zip(['AUROC', 'AUPRC'], axs)):
-        for j, cat in enumerate(desc.keys()):
-            
-            for m, (model, perfs) in enumerate(all_perfs.items()):
-                for k, (perf, prt, a) in enumerate(zip(perfs[cat], partials, alphas)):
-                    facecolor = mcolors.to_rgb(perf_colors[model])  # + (a,)
-                    lbl = model_titles[model] if k == 0 else '_no_legend_'
-                    ax[j].bar(k + m*bar_specs['width'], perf[i], **bar_specs, facecolor=facecolor, label=lbl)
-                    if m == 0:
-                        p_rand = np.array(perfs_rand[cat]).mean(axis=0)
-                        rand_xs = [k - bar_specs['width'], k + bar_specs['width'] * len(models)]
-                        lbl = 'random' if k == 0 else '_no_legend_'
-                        ax[j].plot(rand_xs, [p_rand[i], p_rand[i]], '--', c='k',label=lbl, zorder=20)
-            
-            ax[j].set_xticks([x + (len(models) // 2) * bar_specs['width'] for x in range(len(partials))])
-            ax[j].set_xticklabels([p.replace(' ', '') for p in partials], fontsize='medium')
-            ax[j].tick_params(axis='both', which='both', color='white')  # length=0)
-            ax[j].set_ylim([0.0, 1.0] if measure == 'AUROC' else [0.0, 0.6])
-            legend = ax[j].legend(ncols=2, loc=('lower center' if measure == 'AUROC' else 'upper center'),
-                                  fontsize='medium', labelspacing=0.3, framealpha=1.0)
-            legend.set_zorder(30)
-            ax[j].grid()
-            if j == 0: ax[j].set_ylabel(measure, fontsize='large')
-            if i == 0: ax[j].set_title(desc[cat], fontsize='large')
-            
-    plt.tight_layout()
-    plt.savefig('figures/figure_6_bis.png', dpi=300)
+
+if __name__ == "__main__":
+    main()
+    
