@@ -7,4 +7,5 @@ from .metric_utils import (
     compute_reduced_representation,
     rdm,
     log_figure_to_board,
+    get_gpu_memory,
 )

@@ -7,15 +7,15 @@ import matplotlib.colors as mcolors
 
 MODELS = ["word2vec", "fasttext", "glove"]
 MODEL_TITLES = {"word2vec": "word2vec", "fasttext": "fastText", "glove": "GloVe"}
-LOG_DIR = "logs"
+LOG_DIRS = ["logs_dem_only", "logs"]
 LOG_SUBDIR = "full_whole05_shuffle"
-RESULT_DIR = os.path.join(os.getcwd(), LOG_DIR, LOG_SUBDIR)
+RESULT_DIRS = [os.path.join(os.getcwd(), d, LOG_SUBDIR) for d in LOG_DIRS]
 CATEGORIES = ["DIA_", "PRO_", "MED_"]
 CAT_MAPPINGS = {"DIA_": "MOR_", "PRO_": "REA_", "MED_": "LOS_"}
 MEASURE_LABELS = ["AUROC-BI", "AUPRC-BI"]
 MEASURE_SUFFIXES = ["", "-STD", "-STE"]
-ALPHAS = [0.2, 0.4, 0.6, 0.8, 1.0]
-PARTIALS = ["P = 0.0", "P = 0.1", "P = 0.3", "P = 0.6", "P = 1.0"]
+ALPHAS = [0.2, 0.8]
+PARTIALS = ["DEM ONLY", "P = 0.0"]
 X_DATA = {"AUROC": 0, "AUPRC": 1}
 DESCRS = {"LOS_": "Length-of-stay", "REA_": "Readmission", "MOR_": "Mortality"}
 Y_LIMS = {"LOS_": [0.0, 1.0], "REA_": [0.0, 1.0], "MOR_": [0.0, 1.0]}
@@ -36,13 +36,23 @@ def main():
     """
     all_perf_dict = {}
     for model in MODELS:
-        model_perf_df = load_data(RESULT_DIR, model)
-        model_perf_dict = load_perf(model_perf_df)
-        all_perf_dict.update({model: model_perf_dict})
+        for result_dir in RESULT_DIRS:
+            
+            model_perf_df = load_data(result_dir, model, "prediction")
+            model_perf_dict = load_perf(model_perf_df)
+            if model not in all_perf_dict:
+                all_perf_dict.update({model: model_perf_dict})
+            
+            else:
+                for cat in all_perf_dict[model]:
+                    for suffix in MEASURE_SUFFIXES:
+                        appended = model_perf_dict[cat][suffix][0]
+                        all_perf_dict[model][cat][suffix].append(appended)
+                    
     generate_figure_6(all_perf_dict)
-        
+    
 
-def load_data(dir, model):
+def load_data(dir, model, key):
     """ Load data from the first directory including a given model name in its
         name, opening the first file that includes a given key in its name
     """
@@ -54,7 +64,7 @@ def load_data(dir, model):
     pred_file = next((
         os.path.join(model_dir, item)
         for item in os.listdir(model_dir)
-        if "prediction" in item and "timed" not in item
+        if key in item
     ))
     return pd.read_csv(pred_file)
 
@@ -101,7 +111,7 @@ def generate_figure_6(perf_dict: dict) -> None:
                 )
                 
                 # Draw error bars on top of the coloured bars
-                errs = stds  # stes
+                errs = [s / 2 for s in stds]  # one on each side
                 ax[j].errorbar(
                     np.arange(len(X_DATA)) + k * BAR_SPECS["width"], means, errs,
                     fmt='none', ecolor='k', alpha=0.8, capsize=3, zorder=20,
@@ -122,12 +132,13 @@ def generate_figure_6(perf_dict: dict) -> None:
             )
             
             # Polish figure
+            to_remove = 0.5 * int(len(PARTIALS) % 2 == 0)
             ax[j].set_xticks([
-                x + (len(PARTIALS) // 2) * BAR_SPECS["width"]
+                x + (len(PARTIALS) / 2 - to_remove) * BAR_SPECS["width"]
                 for x in X_DATA.values()
             ])
             ax[j].set_xticklabels(list(X_DATA.keys()), fontsize="large")
-            ax[j].tick_params(axis="both", which="both", length=0)
+            ax[j].tick_params(axis="both", which="both",length=0)
             ax[j].set_ylim(Y_LIMS[cat])
             ax[j].legend(labelspacing=0.2)
             ax[j].grid()
@@ -136,7 +147,7 @@ def generate_figure_6(perf_dict: dict) -> None:
     
     # Save figure to a png file
     plt.tight_layout()
-    plt.savefig("figures/figure_6.png", dpi=300)
+    plt.savefig("figures/figure_6_dem_only.png", dpi=300)
 
 
 if __name__ == "__main__":

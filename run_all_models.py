@@ -60,9 +60,9 @@ PARAM_SETS = [
     },
     
     # {
-    #     'log_dir': "'logs_only_dem'",
-    #     'fasttext.d_embed': '512',
-    #     'exp_id': "'full_whole05_shuffle_dem_only'",
+    #     'log_dir': "'logs_dem_only'",
+    #     'fasttext.d_embed': '256',
+    #     'exp_id': "'full_whole05_shuffle'",
     #     'gpu_index': "3",
     #     'data_subdir': "'datasets_full'",
     #     'token_shuffle_mode': "'whole'",
@@ -78,9 +78,9 @@ PARAM_SETS = [
     #     'fasttext.use_fixed_context': 'false',
     # },
     # {
-    #     'log_dir': "'logs_only_dem'",
-    #     'word2vec.d_embed': '512',
-    #     'exp_id': "'full_whole05_shuffle_dem_only'",
+    #     'log_dir': "'logs_dem_only'",
+    #     'word2vec.d_embed': '256',
+    #     'exp_id': "'full_whole05_shuffle'",
     #     'gpu_index': "3",
     #     'data_subdir': "'datasets_full'",
     #     'token_shuffle_mode': "'whole'",
@@ -96,9 +96,9 @@ PARAM_SETS = [
     #     'word2vec.use_fixed_context': 'false',
     # },
     # {
-    #     'log_dir': "'logs_only_dem'",
-    #     'glove.d_embed': '512',
-    #     'exp_id': "'full_whole05_shuffle_dem_only'",
+    #     'log_dir': "'logs_dem_only'",
+    #     'glove.d_embed': '256',
+    #     'exp_id': "'full_whole05_shuffle'",
     #     'gpu_index': "3",
     #     'data_subdir': "'datasets_full'",
     #     'token_shuffle_mode': "'whole'",

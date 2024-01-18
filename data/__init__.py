@@ -4,6 +4,7 @@ from .data_utils import (
     JsonReader,
     MimicSubsampler,
     TokenFilter,
+    TokenFilterWithTime,
     Encoder,
     TokenShuffler,
     CustomBatcher,

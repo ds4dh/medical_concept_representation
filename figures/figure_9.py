@@ -7,12 +7,12 @@ import matplotlib.pyplot as plt
 MODELS = ["word2vec", "fasttext", "glove"]
 MODEL_TITLES = {"word2vec": "word2vec", "fasttext": "fastText", "glove": "GloVe"}
 CATEGORIES = ["DIA_", "PRO_", "MED_"]
-CONDS_AUROC = ["AUROC-%s" % cond for cond in ["1L", "2L", "3L", "4L", "EM"]]
-CONDS_AUPRC = ["AUPRC-%s" % cond for cond in ["1L", "2L", "3L", "4L", "EM"]]
+CONDS = ["1L", "2L", "3L", "4L", "EM"]
+CONDS_AUROC = ["AUROC-%s" % cond for cond in CONDS]
+CONDS_AUPRC = ["AUPRC-%s" % cond for cond in CONDS]
 MEASURE_SUFFIXES = ["", "-STD", "-STE"]
-# RESULT_DIR = os.path.join(os.getcwd(), "logs_true_latest", "full_whole05_shuffle")
 RESULT_DIR = os.path.join(os.getcwd(), "logs", "full_whole05_shuffle")
-X_DATA = ["1L", "2L", "3L", "4L", "EM"]
+X_DATA = CONDS
 DESCRS = {"DIA_": "ICD10-CM", "PRO_": "ICD10-PCS", "MED_": "ATC"}
 Y_LIMS = {
     "auroc": {"DIA_": [0.0, 1.0], "PRO_": [0.0, 1.0], "MED_": [0.0, 1.0]},
@@ -24,9 +24,9 @@ PERF_COLORS = {"word2vec": "tab:green", "fasttext": "tab:blue", "glove": "tab:re
 RAND_COLORS = {"auroc": "k", "auprc": "k"}
 PERFS_RAND = {
     "auroc": {
-      "DIA_": [[0.5] * 5],
-      "PRO_": [[0.5] * 5],
-      "MED_": [[0.5] * 5],  
+      "DIA_": [[0.5] * len(CONDS)],
+      "PRO_": [[0.5] * len(CONDS)],
+      "MED_": [[0.5] * len(CONDS)],
     },
     "auprc": {  # simulated, but corresponds to n_positives / n_total
         "DIA_": [[0.048,0.006,0.001,0.000,0.000]],
@@ -111,7 +111,7 @@ def generate_figure_9(perf_dict: dict) -> None:
                     )
                     
                     # Plot model performance with error bars
-                    errs = [s / 2 for s in stds]  # one on each side
+                    errs = stds  # stes
                     ax.errorbar(
                         X_DATA, means, yerr=errs, color=PERF_COLORS[model],
                         ecolor=PERF_COLORS[model], elinewidth=1, capsize=3,

@@ -14,7 +14,7 @@ from metrics.metric_utils import (
 
 
 LOAD_REDUCED_DATA = False  # set this to True if you just want to change the plot
-FIG_SIZE = (14, 5)
+FIG_SIZE = (16, 5)
 SMALL_TEXT_SIZE = 8
 BIG_TEXT_SIZE = 14
 OUTCOME_CLASSES = {
@@ -79,6 +79,9 @@ def outcomization_task(
         patient_embeddings, outcome_embeddings, vocab_embeddings, gold_list,
     )
     log_figure_to_board(fig, "outcomization_metric_test", logger, global_step)
+    # fig_name = "figures/figure_7_v2/%s.png" % str(model).split("(")[0].lower()
+    # fig.tight_layout()
+    # plt.savefig(fig_name, dpi=300)
     
     
 def reduce_embeddings(
@@ -195,7 +198,7 @@ def scatter_patients_and_outcomes(
         
         # Plot retrieved data
         patient_params = {"s": 0.1, "alpha": 0.8, "zorder": 1}
-        outcome_params = {"s": 150, "edgecolor": "black", "marker": "*", "zorder": 2}
+        outcome_params = {"s": 250, "edgecolor": "black", "marker": "*", "zorder": 2}
         vocab_params = {"s": 0.1, "alpha": 0.7, "zorder": 0}
         ax = axs[i]
         ax.set_title("Category %s" % cat, fontsize=BIG_TEXT_SIZE)
@@ -212,17 +215,17 @@ def scatter_patients_and_outcomes(
         vocab_params = {"marker": "s", "color": "w", "markersize": 10}
         ax.set_xticklabels([]); ax.set_xticks([])
         ax.set_yticklabels([]); ax.set_yticks([])
-        legend_markers = [
-            Line2D([0], [0], label=label_fn(pos_outcome_name, "patients"), markerfacecolor="blue", **patient_params),
-            Line2D([0], [0], label=label_fn(neg_outcome_name, "patients"), markerfacecolor="red", **patient_params),
-            Line2D([0], [0], label=label_fn(pos_outcome_name, "token"), markerfacecolor="cyan", **outcome_params),
-            Line2D([0], [0], label=label_fn(neg_outcome_name, "token"), markerfacecolor="gold", **outcome_params),
-            Line2D([0], [0], label="Single tokens", markerfacecolor="gray", **vocab_params),
-        ]
-        ax.legend(
-            handles=legend_markers, loc="upper center",
-            ncol=3, columnspacing=0.75, fontsize=SMALL_TEXT_SIZE,
-        )
+        # legend_markers = [
+        #     Line2D([0], [0], label=label_fn(pos_outcome_name, "patients"), markerfacecolor="blue", **patient_params),
+        #     Line2D([0], [0], label=label_fn(neg_outcome_name, "patients"), markerfacecolor="red", **patient_params),
+        #     Line2D([0], [0], label=label_fn(pos_outcome_name, "token"), markerfacecolor="cyan", **outcome_params),
+        #     Line2D([0], [0], label=label_fn(neg_outcome_name, "token"), markerfacecolor="gold", **outcome_params),
+        #     Line2D([0], [0], label="Single tokens", markerfacecolor="gray", **vocab_params),
+        # ]
+        # ax.legend(
+        #     handles=legend_markers, loc="upper center",
+        #     ncol=3, columnspacing=0.75, fontsize=SMALL_TEXT_SIZE,
+        # )
         
     # Return final figure
     return fig

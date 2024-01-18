@@ -153,9 +153,61 @@ class TokenFilter(IterDataPipe):
         if len(condition) == 0:
             return sample
         return (
-                [w for w in sample if not any(s in w for s in condition)],
-                [w for w in sample if any(s in w for s in condition)],
-            )
+            [w for w in sample if not any(s in w for s in condition)],
+            [w for w in sample if any(s in w for s in condition)],
+        )
+
+
+class TokenFilterWithTime(TokenFilter):
+    def __init__(
+        self,
+        dp: IterDataPipe,
+        partial_info_levels: list[float],
+        to_keep: list[str],
+        to_remove: list[str]=[],
+        to_split: list[str]=[],
+    ) -> None:
+        super().__init__(dp=dp, to_remove=to_remove, to_split=to_split)
+        self.partial_info_levels = partial_info_levels
+        self.to_keep = to_keep
+    
+    def __iter__(self):
+        """ Iterate through the dataset and, for each sample, generate samples
+            of any partial information level, extracting labels only from the
+            tokens that come after the given level
+        """
+        for sample in self.dp:
+            sample = self.remove_fn(sample, self.to_remove)
+            intact_part, flexible_part = \
+                self.extract_fn(sample, self.to_keep, return_sample=True)
+            n_flexible_tokens = len(flexible_part)
+            for level in self.partial_info_levels:
+                n_tokens_to_yield = int(n_flexible_tokens * level)
+                partial_tokens, golds = \
+                    self.partialize_fn(flexible_part, n_tokens_to_yield)
+                yield intact_part + partial_tokens, golds
+                
+    def partialize_fn(self, sample, n_tokens_to_yield):
+        """ Start by splitting a sample between past and future tokens, then
+            define gold list as all category tokens in the future tokens, and
+            define input list as the whole list of past tokens
+        """
+        input_tokens = sample[:n_tokens_to_yield]
+        future_tokens = sample[n_tokens_to_yield:]
+        gold_tokens = self.extract_fn(future_tokens, self.to_split)
+        return input_tokens, gold_tokens
+    
+    def extract_fn(self, sample, to_extract, return_sample=False):
+        """ Wrapper around split function that extracts a split from a sample
+            and return an empty list if nothing is found in the sample.
+            If return_sample is True, the function returns the extract, then the
+            remaining part of the sample.
+        """
+        split = self.split_fn(sample, to_extract)
+        if len(split) == 1:
+            return ([], sample) if return_sample else []
+        else:
+            return (split[-1], split[0]) if return_sample else split[-1]
         
 
 class TokenShuffler(IterDataPipe):

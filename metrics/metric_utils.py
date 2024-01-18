@@ -194,8 +194,8 @@ def bag_of_little_bootstraps(
     scores: cp.ndarray,
     metric_fn: Callable,
     n_bootstraps: int=100,
-    n_subsamples: int=50,
-    subsample_size: int=1000,
+    n_subsamples: int=100,
+    subsample_size: int=10_000,
     **kwargs,
 ) -> list[float]:
     """ More memory efficient bag of little bootstraps procedure
