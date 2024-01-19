@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Environment specifics
-ENV_NAME="autophe"
+ENV_NAME="medical_representation"
 PYTHON_VERSION="3.10"
 PIP_PACKAGES="torch torchdata pytorch-lightning numpy pandas \
 scipy scikit-learn hdbscan dask_ml matplotlib tqdm nltk \

@@ -9,7 +9,7 @@ Once you have access to the files, you should upload them at the following locat
 - data/datasets/mimic-iv-2.2/hosp/prescriptions.csv.gz
 - data/datasets/mimic-iv-2.2/hosp/labevents.csv.gz
 
-You can then build the pre-processed datasets, using the following command:
+You can then build the pre-processed datasets, using the following command, ran from the root of the local repository:
 ```
 python data/datasets/mimic-iv-2.2/process_mimic.py
 ```
