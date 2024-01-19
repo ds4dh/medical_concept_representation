@@ -79,10 +79,7 @@ def outcomization_task(
         patient_embeddings, outcome_embeddings, vocab_embeddings, gold_list,
     )
     log_figure_to_board(fig, "outcomization_metric_test", logger, global_step)
-    # fig_name = "figures/figure_7_v2/%s.png" % str(model).split("(")[0].lower()
-    # fig.tight_layout()
-    # plt.savefig(fig_name, dpi=300)
-    
+        
     
 def reduce_embeddings(
     embeddings: list[np.ndarray],
@@ -103,6 +100,8 @@ def reduce_embeddings(
     # Collect all embeddings in a single array
     all_embeddings = (patient_embeddings, outcome_embeddings, vocab_embeddings)
     all_embeddings = np.concatenate(all_embeddings)
+    
+    # Normalize embeddings (not done because cosine + correlation distances)
     # all_embeddings_means = all_embeddings.mean(axis=1, keepdims=True)
     # all_embeddings_stds = all_embeddings.std(axis=1, keepdims=True)
     # all_embeddings = (all_embeddings - all_embeddings_means) / all_embeddings_stds

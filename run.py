@@ -144,7 +144,7 @@ class PytorchLightningWrapper(pl.LightningModule):
             num_workers=RUN_PARAMS["num_workers"],
             pin_memory=RUN_PARAMS["pin_memory"],
         )
-                
+        
     def train_dataloader(self):
         """ Return the training dataloader
         """

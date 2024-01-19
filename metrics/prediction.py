@@ -21,7 +21,6 @@ from metrics.metric_utils import (
 
 MAX_SAMPLES = np.inf  # set to < np.inf for debug!
 PARTIAL_LEVELS = [0.0, 0.1, 0.3, 0.6, 1.0]
-PARTIAL_LEVELS_TIMED = [0.0, 0.1, 0.3, 0.5, 0.8]
 LENIENT_LETTER_MATCHES = [1, 2, 3, 4, "Exact"]
 MULTI_CATEGORIES = ["DIA_", "PRO_", "MED_"]
 BINARY_CLASSES = {
@@ -52,32 +51,23 @@ def prediction_task(
         to_print = "\nProceeding with prediction testing metric"
         print(to_print if not random_mode else to_print + " (random baseline)")
         
-        # # Multi-class prediction performance (ICD10-CM, ICD10-PCS, ATC)
-        # multi_perf = {}
-        # for cat in MULTI_CATEGORIES:
-        #     multi_perf[cat] = \
-        #         compute_prediction_multi(model, pipeline, cat, random_mode)       
-        
-        # # Binary prediction performance (mortality, readmission, length-of-stay)
-        # binary_perf = {}
-        # for k, v in BINARY_CLASSES.items():
-        #     binary_perf[k] = \
-        #         compute_prediction_binary(model, pipeline, v, random_mode)
-        
-        # # Log performance (no plot because not used in this form in the publication)
-        # generate_csv(multi_perf, binary_perf, logger.save_dir, random_mode)
-        # # fig = generate_figure(multi_perf, binary_perf)
-        # # fig_title = "prediction_metric_rd_%s_rc_%s" % (REDUCED_DIM, random_mode)
-        # # log_figure_to_board(fig, fig_title, logger, global_step)
-        
-        # Multi-class prediction performance (timed version)
-        multi_timed_perf = {}
+        # Multi-class prediction performance (ICD10-CM, ICD10-PCS, ATC)
+        multi_perf = {}
         for cat in MULTI_CATEGORIES:
-            multi_timed_perf[cat] = \
-                compute_prediction_multi_timed(model, pipeline, cat, random_mode)
+            multi_perf[cat] = \
+                compute_prediction_multi(model, pipeline, cat, random_mode)       
         
-        # Log timed multi-class prediction task performance
-        generate_csv_timed(multi_timed_perf, logger.save_dir, random_mode)
+        # Binary prediction performance (mortality, readmission, length-of-stay)
+        binary_perf = {}
+        for k, v in BINARY_CLASSES.items():
+            binary_perf[k] = \
+                compute_prediction_binary(model, pipeline, v, random_mode)
+        
+        # Log performance (no plot because not used in this form in the publication)
+        generate_csv(multi_perf, binary_perf, logger.save_dir, random_mode)
+        # fig = generate_figure(multi_perf, binary_perf)
+        # fig_title = "prediction_metric_rd_%s_rc_%s" % (REDUCED_DIM, random_mode)
+        # log_figure_to_board(fig, fig_title, logger, global_step)
         
 
 def compute_prediction_multi(
@@ -360,105 +350,6 @@ def stack_partial_level_fn(model, sample, encodings, weights):
     return torch.stack(partial_patient_embeddings, dim=0)
 
 
-def compute_prediction_multi_timed(
-    model: torch.nn.Module,
-    pipeline: data.DataPipeline,
-    cat: str,
-    random_mode: bool,
-) -> dict[str, dict[str, float]]:
-    """ Compute top-k accuracy for a multi-label classification task
-        - A model embeds sequences of tokens in which all tokens belonging to a
-        category are removed
-        - Sequence embeddings are compared to label token embeddings
-        - Top-k accuracy is computed based on cosine similarity
-    """
-    # Retrieve labels and initialize
-    encode_fn = pipeline.tokenizer.encode
-    unk_encoding = encode_fn("[UNK]")
-    labels, label_embeddings = get_labels_multi(model, pipeline, cat)
-    to_remove = pipeline.run_params["ngrams_to_remove"] + ALL_BINARY_LEVELS
-    dp = data.JsonReader(pipeline.data_fulldir, "valid")
-    dp = Shuffler(dp)  # to avoid taking everything from the first samples
-    dp = data.TokenFilterWithTime(
-        dp, PARTIAL_LEVELS_TIMED,
-        to_keep=["DEM_"], to_remove=to_remove, to_split=[cat],
-    )
-    
-    # Compute patient embeddings and store gold labels
-    patient_embeddings, golds = [], []
-    loop = tqdm(dp, desc=" - Embedding patients (no %s tokens)" % cat)
-    for n, (sample, gold) in enumerate(loop):
-        if n > 100_000: break
-        # if n > MAX_SAMPLES: break
-        # if len(gold) == 0: continue <- not here, to keep track of partial info levels
-        embedding = get_patient_embedding(
-            model, sample, pipeline, random_mode, stack_partial_levels=False,
-        )
-        gold_set = set([g for g in gold if encode_fn(g) != unk_encoding])
-        patient_embeddings.append(embedding)
-        golds.append(gold_set)
-    
-    # Compute prediction scores based on patient-label embedding similarities
-    print(" - Comparing patient embeddings to %s tokens" % cat)
-    patient_embeddings = torch.stack(patient_embeddings, dim=0)  # not cat
-    patient_embeddings, label_embeddings = \
-        reduce_embeddings(patient_embeddings, label_embeddings)
-    scores = cosine_similarity(patient_embeddings, label_embeddings)
-    
-    # Return performance for different lenient settings, using the scores
-    return {
-        lenient: compute_micro_timed_performance(scores, golds, labels, lenient)
-        for lenient in LENIENT_LETTER_MATCHES
-    }
-
-
-def compute_micro_timed_performance(
-    scores: np.ndarray,
-    golds: list[set[str]],
-    labels: list[str],
-    n_matched_letters: int,
-) -> dict[str, Union[list[float], float]]:
-    """ Evaluate model embedding performance using micro averaged metrics
-        Changed from compute_micro_performance function since now golds come
-        one-to-one with each level of sample partial information
-    """
-    # Load collapsed scores and labels given lenient level
-    lenient_scores, lenient_golds, lenient_labels = \
-          lenient_match_collapse(scores, golds, labels, n_matched_letters)
-    one_hotter = MultiLabelBinarizer(classes=lenient_labels)
-    lenient_golds = one_hotter.fit_transform(lenient_golds)
-    
-    # Compute AUROC and AUPRC for given lenient level
-    perf_dict = {}
-    desc = " --- Computing AUROC & AUPRC for %s letters" % n_matched_letters
-    for i, partial in tqdm(list(enumerate(PARTIAL_LEVELS_TIMED)), desc=desc):
-        
-        # Compute AUROC and AUPRC (+ CI) for this level of partial information
-        partial_scores = lenient_scores[i::len(PARTIAL_LEVELS_TIMED)].ravel()
-        partial_golds = lenient_golds[i::len(PARTIAL_LEVELS_TIMED)].ravel()
-        
-        # If enough samples with a defined set of golds at that partial level
-        if sum(partial_golds) > 10:
-            auroc, auroc_std, auroc_ste = \
-                bootstrap_auroc_ci(partial_golds, partial_scores)
-            auprc, auprc_std, auprc_ste = \
-                bootstrap_auprc_ci(partial_golds, partial_scores)
-            perf_dict[partial] = {
-                "auroc": auroc, "auroc_std": auroc_std, "auroc_ste": auroc_ste,
-                "auprc": auprc, "auprc_std": auprc_std, "auprc_ste": auprc_ste,
-            }
-            
-        # If not (else the bootstrap would never finish)
-        else:
-            perf_dict[partial] = {
-                "auroc": np.nan, "auroc_std": np.nan, "auroc_ste": np.nan,
-                "auprc": np.nan, "auprc_std": np.nan, "auprc_ste": np.nan,
-            }
-            
-    # Return performance dictionary
-    return perf_dict
-
-
 def generate_csv(
     multi_perfs: dict[str, list[float]],
     binary_perfs: dict[str, float],
@@ -509,48 +400,6 @@ def generate_csv(
         (REDUCED_DIM, random_mode)
     save_path = os.path.join(save_dir, csv_filepath)
     df = pd.DataFrame(rows, columns=heads)
-    df.to_csv(save_path, index=False, header=heads)
-    
-    
-def generate_csv_timed(
-    multi_timed_perf: dict[str, list[float]],
-    save_dir: str,
-    random_mode: bool,
-) ->  plt.Figure:
-    """ Generate a csv summary of the timed prediction tasks
-    """
-    # Initialize headers and rows to write
-    base_specs = ["1L", "2L", "3L", "4L", "EM"]
-    suffixes = ["", "-STD", "-STE"]
-    specs = [
-        "%s%s" % (base_spec, suffix) if suffix else base_spec
-        for base_spec in base_specs for suffix in suffixes
-    ]
-    heads = ["Category", "Partial"] + \
-            ["AUROC-" + spec for spec in specs] + \
-            ["AUPRC-" + spec for spec in specs]
-    
-    # Fill the timed rows with the timed results
-    rows_timed = []
-    for (cat, multi_timed_results) in multi_timed_perf.items():
-        new_rows = [[cat, "%s" % p] for p in PARTIAL_LEVELS_TIMED]
-        
-        # Update rows with timed multi-class prediction metric
-        for metric in ["auroc", "auprc"]:
-            for multi_timed_result in multi_timed_results.values():
-                for new_row, perf in zip(new_rows, multi_timed_result.values()):
-                    new_row.append("%.03f" % perf[metric])
-                    new_row.append("%.03f" % perf[metric + "_std"])
-                    new_row.append("%.03f" % perf[metric + "_ste"])     
-                       
-        # Add all rows
-        rows_timed.extend(new_rows)
-    
-    # Save the results as a csv file in the correct logs directory
-    csv_filepath = "prediction_results_timed_rd_%s_rc_%s.csv" % \
-        (REDUCED_DIM, random_mode)
-    save_path = os.path.join(save_dir, csv_filepath)
-    df = pd.DataFrame(rows_timed, columns=heads)
     df.to_csv(save_path, index=False, header=heads)
     
     
