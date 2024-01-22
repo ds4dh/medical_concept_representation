@@ -22,24 +22,24 @@ Repository for the manuscript entitled "Comparative neural word embeddings appro
    conda activate medical_representation
    ```
 
-   Or have an environment ready with the packages listed in environment.yml
+   If you have version issues, you can build an environment with the packages listed in environment.yml
 
 3. The project uses WandbLogger for experiment tracking. Ensure you have a Weights & Biases account set up for logging.
 
 ## Usage
 
-To download and preprocess the dataset, follow instructions at https://github.com/ds4dh/medical_concept_representation/tree/main/data
+You need to download the data yourself! Instructions for downloading and pre-processing the data are here: https://github.com/ds4dh/medical_concept_representation/tree/main/data
 
-To train the models, run:
+Once the pre-processed data is ready, train the models with:
 
 ```bash
-python run_all_models.py
+python run_all_models.py  # long step, best in screen https://linuxize.com/post/how-to-use-linux-screen/
 ```
 
 Once the models are trained, test the trained models with:
 
 ```bash
-python run_all_models.py -t
+python run_all_models.py -t  # long step, best in screen https://linuxize.com/post/how-to-use-linux-screen/
 ```
 
 Result figures 4, 5, and 7 will be available at your wandb log page.
