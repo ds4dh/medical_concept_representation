@@ -13,6 +13,7 @@ Repository for the manuscript entitled "Comparative neural word embeddings appro
 1. Clone the repository:
    ```bash
    git clone git@github.com:ds4dh/medical_concept_representation.git  # or https://github.com/ds4dh/medical_concept_representation.git
+   cd medical_concept_representation
    ```
 2. Install the required dependencies:
 
