@@ -1,7 +1,7 @@
 import os
 import json
 from tqdm import tqdm
-from tqdm.contrib.concurrent import process_map
+from multiprocessing import Pool
 from load_hosp_data import (
     load_admission_data,
     load_patient_data,
@@ -25,8 +25,7 @@ from mimic_utils import (
     LABEVENT_PARAMS,
 )
 
-
-OUTPUT_DIR = os.path.join(DIR_MIMIC_IV, 'datasets_full') 
+OUTPUT_DIR = os.path.join(DIR_MIMIC_IV, 'datasets_full')
 TRAIN_RATIO = 0.8
 VALID_RATIO = 0.1
 TEST_RATIO = 0.1
@@ -34,7 +33,6 @@ assert TRAIN_RATIO + VALID_RATIO + TEST_RATIO - 1.0 < 0.001
 N_CPUS_USED = max(1, os.cpu_count() // 2)
 DEBUG = False  # False
 if DEBUG: OUTPUT_DIR += '_debug'
-
 
 def main():
     # Load all relevant data
@@ -65,21 +63,19 @@ def main():
         if os.path.exists(file_path): os.remove(file_path)
         iter_args = [(file_path, data, s) for s in split_subject_id[split]]
         if not DEBUG:
-            process_map(
-                write_data_for_one_subject,
-                iter_args,
-                chunksize=1000,
-                max_workers=N_CPUS_USED,
-                desc='Building %s set' % split,
-            )
+            with Pool(processes=N_CPUS_USED) as pool:
+                list(tqdm(
+                    pool.imap(write_data_for_one_subject, iter_args, chunksize=1000),
+                    total=len(iter_args),
+                    desc='Building %s set' % split,
+                ))
         else:  # run on a single CPU if using debug mode
             for arg in tqdm(iter_args, desc='Building %s set' % split):
                 write_data_for_one_subject(arg)
-            
 
 def write_data_for_one_subject(args):
     # Parse arguments
-    file_path, data, subject_id = args  # I guess there is a better way
+    file_path, data, subject_id = args
     
     # Get all relevant data for one patient
     patient = get_patient_data(data, subject_id, **PATIENT_PARAMS)
@@ -91,7 +87,7 @@ def write_data_for_one_subject(args):
     labevents = get_patient_data(data, subject_id, **LABEVENT_PARAMS)
     
     # Generate sentence for each admission
-    for admission_id in admissions.hadm_id:  # only len(adms.hadm_id) > 0
+    for admission_id in admissions.hadm_id:
         # Get all relevant data for one admission
         adm = get_admission_data(admissions, admission_id)
         loc = get_admission_data(locations, admission_id)
@@ -123,7 +119,6 @@ def write_data_for_one_subject(args):
         seq = sub_tokens + lbl_tokens + dem_tokens + dia_tokens + sorted_tokens
         with open(file_path, 'a') as file:
             file.write(json.dumps(seq) + '\n')
-            
 
 if __name__ == '__main__':
     time_with_profiler = False
@@ -133,7 +128,7 @@ if __name__ == '__main__':
         with cProfile.Profile() as pr:
             main()
         stats = pstats.Stats(pr)
-        stats.sort_stats(pstats.SortKey.TIME) 
+        stats.sort_stats(pstats.SortKey.TIME)
         stats.dump_stats(filename='profiling.prof')  # snakeviz profiling.prof
     else:
         main()

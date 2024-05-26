@@ -155,10 +155,6 @@ def get_patient_data(data: dict[pd.DataFrame],
     
     # Remap values if required (before or after NaNs replacement???)
     subject_fields = subject_data[fields_to_get]
-
-    if data_key == 'locations':
-        import pdb; pdb.set_trace()
-        
     subject_fields = subject_fields.replace(mappings)
     
     # Handle NaNs if required (if field is a dict, replace NaN key by value)

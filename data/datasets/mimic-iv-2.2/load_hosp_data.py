@@ -172,7 +172,7 @@ def load_labevent_data(path_mimic_iv_hosp_dir: str,
     # Hosp data for lab events (this step takes about 10 minutes)
     print('Loading data for lab events (takes about 10 minute)')
     df_labevent_chunks = pd.read_csv(
-        os.path.join(path_mimic_iv_hosp_dir, 'labevents.csv'),
+        os.path.join(path_mimic_iv_hosp_dir, 'labevents.csv.gz'),
         usecols=[
             'subject_id',
             'hadm_id',
