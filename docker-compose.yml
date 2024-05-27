@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  medical_representation:
+    build: .
+    volumes:
+      - ./data:/app/data
+    deploy:
+      resources:
+        limits:
+          cpus: '20.0'
+    stdin_open: true
+    tty: true
