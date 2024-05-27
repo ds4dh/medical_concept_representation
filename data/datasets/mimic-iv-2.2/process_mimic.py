@@ -1,9 +1,7 @@
 import os
-import sys
 import json
 from tqdm import tqdm
 from multiprocessing import Pool
-# from tqdm.contrib.concurrent import process_map
 from load_hosp_data import (
     load_admission_data,
     load_patient_data,
@@ -46,7 +44,7 @@ def main():
         'diagnoses': load_diagnosis_data(os.path.join(DIR_MIMIC_IV, 'hosp')),
         'procedures': load_procedure_data(os.path.join(DIR_MIMIC_IV, 'hosp')),
         'medications': load_medication_data(os.path.join(DIR_MIMIC_IV, 'hosp')),
-        # 'labevents': load_labevent_data(os.path.join(DIR_MIMIC_IV, 'hosp')),
+        'labevents': load_labevent_data(os.path.join(DIR_MIMIC_IV, 'hosp')),
     }
     
     # Build splits based on patient ids
@@ -83,7 +81,6 @@ def main():
 def write_data_for_one_subject(args):
     # Parse arguments
     file_path, data, subject_id = args
-    # print(f"Patient {subject_id} processed")
     
     # Get all relevant data for one patient
     patient = get_patient_data(data, subject_id, **PATIENT_PARAMS)
@@ -92,7 +89,7 @@ def write_data_for_one_subject(args):
     diagnoses = get_patient_data(data, subject_id, **DIAGNOSIS_PARAMS)
     procedures = get_patient_data(data, subject_id, **PROCEDURE_PARAMS)
     medications = get_patient_data(data, subject_id, **MEDICATION_PARAMS)
-    # labevents = get_patient_data(data, subject_id, **LABEVENT_PARAMS)
+    labevents = get_patient_data(data, subject_id, **LABEVENT_PARAMS)
     
     # Generate sentence for each admission
     for admission_id in admissions.hadm_id:
@@ -102,7 +99,7 @@ def write_data_for_one_subject(args):
         dia = get_admission_data(diagnoses, admission_id)
         pro = get_admission_data(procedures, admission_id)
         med = get_admission_data(medications, admission_id)
-        # lab = get_admission_data(labevents, admission_id, {'flag': 'abnormal'})
+        lab = get_admission_data(labevents, admission_id, {'flag': 'abnormal'})
         dem, lbl = get_admission_labels(patient, admissions, adm)
         
         # Build admission sentence (and sort using different time flags)
@@ -117,10 +114,10 @@ def write_data_for_one_subject(args):
                for v, t in pro[['icd_code', 'chartdate']].values]
         med_tokens = [(t - t0, 'MED_%s' % v) 
                for v, t in med[['gsn', 'starttime']].values]
-        # lab_tokens = [(t - t0, 'LAB_%s' % v)
-        #        for v, t in lab[['itemid', 'charttime']].values]
+        lab_tokens = [(t - t0, 'LAB_%s' % v)
+               for v, t in lab[['itemid', 'charttime']].values]
         sorted_tokens = [s[1] for s in sorted(
-            loc_tokens + pro_tokens + med_tokens,  # + lab_tokens,
+            loc_tokens + pro_tokens + med_tokens + lab_tokens,
             key=lambda t: t[0])]
         
         # Build the patient sequence and append it to the correct json file
